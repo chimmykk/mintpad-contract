@@ -6,7 +6,7 @@ Try running some of the following tasks:
 
 ```shell
 npx hardhat 
-npx hardhat run scripts/deploy.js --network ha
+npx hardhat run scripts/deploy.js --network hardhat
 npx hardhat test
 REPORT_GAS=true npx hardhat test
 npx hardhat node
