@@ -7,17 +7,24 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
 /**
- * @title NFTCollection Template this will serve as the template for the mintpad ERC-721 NFT collections
- * @dev ERC721 NFT collection contract with adjustable mint price, base URI, and max supply.
+ * @title Mintpad ERC-721 Template
+ * @dev ERC721 NFT collection contract with adjustable mint price, base URI, max supply, and royalties.
  */
-contract NFTCollection is ERC721Enumerable, Ownable {
+contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     using Address for address payable;
 
     uint256 public mintPrice;
     uint256 public maxSupply;
     string private baseTokenURI;
     address payable public recipient;
-    uint256 public developerFee;
+
+    // Mint phase
+    uint256 public mintStartTime;
+    uint256 public mintEndTime;
+
+    // Royalties
+    uint256 public royaltyPercentage;
+    address payable public royaltyRecipient;
 
     /**
      * @dev Initializes the contract with specified parameters.
@@ -27,7 +34,8 @@ contract NFTCollection is ERC721Enumerable, Ownable {
      * @param _maxSupply The maximum number of NFTs in the collection.
      * @param _baseTokenURI The base URI for the NFT metadata.
      * @param _recipient The address to receive the funds from minted NFTs.
-     * @param _developerFee The fee for the developer in wei.
+     * @param _royaltyRecipient The address to receive royalty payments.
+     * @param _royaltyPercentage The royalty percentage (e.g., 500 for 5%).
      * @param owner The owner of the NFT collection.
      */
     constructor(
@@ -37,14 +45,18 @@ contract NFTCollection is ERC721Enumerable, Ownable {
         uint256 _maxSupply,
         string memory _baseTokenURI,
         address payable _recipient,
-        uint256 _developerFee,
+        address payable _royaltyRecipient,
+        uint256 _royaltyPercentage,
         address owner
     ) ERC721(name, symbol) Ownable(owner) {
+        require(_royaltyPercentage <= 10000, "Royalty percentage too high");
+
         mintPrice = _mintPrice;
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
         recipient = _recipient;
-        developerFee = _developerFee;
+        royaltyRecipient = _royaltyRecipient;
+        royaltyPercentage = _royaltyPercentage;
     }
 
     /**
@@ -54,11 +66,10 @@ contract NFTCollection is ERC721Enumerable, Ownable {
     function mint(uint256 tokenId) external payable {
         require(totalSupply() < maxSupply, "Max supply reached.");
         require(msg.value == mintPrice, "Incorrect Ether value.");
+        require(block.timestamp >= mintStartTime && block.timestamp <= mintEndTime, "Minting not allowed at this time.");
 
         // Transfer funds
-        uint256 amountToRecipient = msg.value - developerFee;
-        recipient.sendValue(amountToRecipient);
-        payable(owner()).sendValue(developerFee);
+        recipient.sendValue(msg.value);
 
         _safeMint(msg.sender, tokenId);
     }
@@ -69,6 +80,27 @@ contract NFTCollection is ERC721Enumerable, Ownable {
      */
     function setBaseURI(string memory _baseTokenURI) external onlyOwner {
         baseTokenURI = _baseTokenURI;
+    }
+
+    /**
+     * @notice Sets the mint phase (start and end time).
+     * @param _mintStartTime The start time of the mint phase.
+     * @param _mintEndTime The end time of the mint phase.
+     */
+    function setMintPhase(uint256 _mintStartTime, uint256 _mintEndTime) external onlyOwner {
+        mintStartTime = _mintStartTime;
+        mintEndTime = _mintEndTime;
+    }
+
+    /**
+     * @notice Sets the royalty percentage and recipient.
+     * @param _royaltyRecipient The address to receive royalty payments.
+     * @param _royaltyPercentage The royalty percentage 
+     */
+    function setRoyalties(address payable _royaltyRecipient, uint256 _royaltyPercentage) external onlyOwner {
+        require(_royaltyPercentage <= 10000, "Royalty percentage too high");
+        royaltyRecipient = _royaltyRecipient;
+        royaltyPercentage = _royaltyPercentage;
     }
 
     /**
