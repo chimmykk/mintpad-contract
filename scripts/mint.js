@@ -2,7 +2,7 @@ const { ethers } = require("hardhat");
 
 async function main() {
 
-  const collectionAddress = "0x82E7dceC78eF16ccDD803EcE15589660a7f065A0";
+  const collectionAddress = "0x480B23F530cD7a3b7da9EcE28ad2fC6B6c7E7E4b";
 
   const tokenId = 0;
 

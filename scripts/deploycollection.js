@@ -2,7 +2,7 @@ const { ethers } = require("hardhat");
 
 async function main() {
   // Define the master contract (factory)
-  const factoryAddress = "0x9A7197E2f9e282eFba0061E81b358922bb856e1a";
+  const factoryAddress = "0x39bADC7850ac3D5b7E319C275600D04FA2834479";
   
   // Define the parameters for the new NFT collection
   const name = "MyNFTCollection";
@@ -15,7 +15,7 @@ async function main() {
   const royaltyPercentage = 500; // 5% royalties 
 
   // Get the factory contract instance
-  const factory = await ethers.getContractAt("MintPadERC721Factory", factoryAddress);
+  const factory = await ethers.getContractAt("MintPadCollectionFactory.sol", factoryAddress);
 
   // Retrieve the platform fee from the factory contract
   const platformFee = await factory.PLATFORM_FEE();

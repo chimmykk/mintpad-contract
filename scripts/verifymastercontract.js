@@ -1,14 +1,14 @@
 const { ethers, run } = require("hardhat");
 
 async function main() {
-  const contractAddress = "0x0841B86c1b9CE6B4F7abf327adD7DE8F8A3a9762"; // Replace with your MasterNFTFactory contract address
+  const contractAddress = "0x39bADC7850ac3D5b7E319C275600D04FA2834479"; 
 
   console.log("Verifying contract at address:", contractAddress);
 
   try {
     await run("verify:verify", {
       address: contractAddress,
-      constructorArguments: [], // MasterNFTFactory does not have constructor arguments
+      constructorArguments: [],
     });
     console.log("Verification process completed.");
   } catch (error) {

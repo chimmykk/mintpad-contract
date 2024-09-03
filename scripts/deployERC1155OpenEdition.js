@@ -1,4 +1,3 @@
-
 const { ethers } = require("hardhat");
 
 async function main() {
@@ -6,12 +5,11 @@ async function main() {
     console.log("Deploying contracts with the account:", deployer.address);
 
     // Compile and deploy the contract
-    const MasterNFTFactory = await ethers.getContractFactory("MintPadCollectionFactory");
-    const masterNFTFactory = await MasterNFTFactory.deploy();
+    const ERC1155Factory = await ethers.getContractFactory("MintPadERC1155OpenEditionFactory");
+    const erc1155Factory = await ERC1155Factory.deploy();
 
-    console.log("MasterNFTFactory deployed to:", masterNFTFactory);
+    console.log("MintPadERC1155OpenEditionFactory deployed to:", erc1155Factory);
 }
-
 
 main()
     .then(() => process.exit(0))
