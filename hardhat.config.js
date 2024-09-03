@@ -13,12 +13,26 @@ module.exports = {
     },
   },
   networks: {
-    bscTestnet: {
-      url: `https://data-seed-prebsc-1-s1.binance.org:8545`, // BSC Testnet RPC URL
-      accounts: [process.env.DEPLOYER_PRIVATE_KEY] // Your wallet private key
+    taikohelka: {
+      url: `https://167009.rpc.thirdweb.com/${process.env.THIRDWEB_API_KEY}`, // Taiko Helka RPC URL
+      accounts: [process.env.PRIVATE_KEY] // Use environment variable for wallet private key
+    },
+    goerli: {
+      url: `https://goerli.infura.io/v3/${process.env.INFURA_API_KEY}`,
+      accounts: [process.env.PRIVATE_KEY] // Use environment variable for wallet private key
     }
   },
   etherscan: {
-    apiKey: process.env.BSCSCAN_API_KEY // Your BscScan API key
+    apiKey: process.env.ETHERSCAN_API_KEY, // Your Etherscan API key
+    customChains: [
+      {
+        network: "taikohelka",
+        chainId: 167009,
+        urls: {
+          apiURL: "https://api-hekla.taikoscan.io/api",
+          browserURL: "https://hekla.taikoscan.io/"
+        }
+      }
+    ]
   }
 };

@@ -1,32 +1,27 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  // Replace with the actual address of the deployed ERC-721 collection contract
-  const collectionAddress = "0xbd9514F3BaF68bC494463f7079F88E67210c4559";
 
-  // Define the token ID you want to mint (e.g., token ID 1)
-  const tokenId = 1;
+  const collectionAddress = "0x82E7dceC78eF16ccDD803EcE15589660a7f065A0";
 
-  // Get the signer who will be minting the token
+  const tokenId = 0;
+
+
   const [signer] = await ethers.getSigners();
-
-  // Set up the collection contract instance
   const collectionContract = await ethers.getContractAt("MintpadERC721Collection", collectionAddress);
-
-  // Define the mint price (must match the mint price in the contract)
   const mintPrice = await collectionContract.mintPrice();
 
-  // Send the transaction to mint the token
   const tx = await collectionContract.connect(signer).mint(tokenId, {
-    value: mintPrice, // Send the correct mint price in the transaction
+    value: mintPrice, 
   });
-
-  // Wait for the transaction to be mined
   console.log("Minting transaction sent:", tx.hash);
   const receipt = await tx.wait();
 
   console.log(`Token ID ${tokenId} minted successfully!`);
-  console.log("Transaction receipt:", receipt);
+
+
+  const tokenURI = await collectionContract.tokenURI(tokenId);
+  console.log(`Token URI for token ID ${tokenId}: ${tokenURI}`);
 }
 
 main()

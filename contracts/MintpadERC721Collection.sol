@@ -5,6 +5,7 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC721Enumerable} from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
  * @title Mintpad ERC-721 Template
@@ -12,6 +13,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
  */
 contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     using Address for address payable;
+    using Strings for uint256;
 
     uint256 public mintPrice;
     uint256 public maxSupply;
@@ -95,7 +97,7 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     /**
      * @notice Sets the royalty percentage and recipient.
      * @param _royaltyRecipient The address to receive royalty payments.
-     * @param _royaltyPercentage The royalty percentage 
+     * @param _royaltyPercentage The royalty percentage.
      */
     function setRoyalties(address payable _royaltyRecipient, uint256 _royaltyPercentage) external onlyOwner {
         require(_royaltyPercentage <= 10000, "Royalty percentage too high");
@@ -106,7 +108,20 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     /**
      * @dev Returns the base URI set for the metadata.
      */
-    function _baseURI() internal view override returns (string memory) {
+    function _baseURI() internal view virtual override returns (string memory) {
         return baseTokenURI;
     }
+
+    /**
+     * @notice Returns the metadata URI for a given token ID.
+     * @param tokenId The ID of the token.
+     * @return The metadata URI for the token.
+     */
+function tokenURI(uint256 tokenId) public view override returns (string memory) {
+    require(ownerOf(tokenId) != address(0), "ERC721Metadata: URI query for nonexistent token");
+
+    // Concatenate base URI and token ID to form the full URI
+    return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
+}
+
 }

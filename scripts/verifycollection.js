@@ -1,23 +1,21 @@
-const { run } = require("hardhat");
+const { run, ethers } = require("hardhat");
 
 async function main() {
-  const contractAddress = "0xbd9514F3BaF68bC494463f7079F88E67210c4559"; // Replace with deployed collection address
-
+  const contractAddress = "0x82E7dceC78eF16ccDD803EcE15589660a7f065A0"; // Replace with deployed collection address
 
   const args = [
     "MyNFTCollection", // name
     "MNC", // symbol
-    ethers.parseEther("0.05").toString(), // mintPrice (0.05 ETH)
+    ethers.parseEther("0.00001"), // mintPrice (0.00001 ETH)
     10000, // maxSupply
-    "https://example.com/metadata/", // baseTokenURI
+    "ipfs://bafybeiafuvw7zyjo3kmeok6i4lkfwungtp4rzirng6j4vkispln7vp64xi/", // baseTokenURI
     "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a", // recipient address for minting funds
     "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a", // royalty recipient address
     500, // royaltyPercentage 
-    "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a" // owner address
+    "0xbEc50cA74830c67b55CbEaf79feD8517E9d9b3B2" // owner address
   ];
 
   try {
-
     await run("verify:verify", {
       address: contractAddress,
       constructorArguments: args,

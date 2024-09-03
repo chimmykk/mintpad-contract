@@ -1,26 +1,26 @@
 const { ethers } = require("hardhat");
 
 async function main() {
-  // Define the contract's factory address (already deployed)
-  const factoryAddress = "0x8E5be506136ffFC6273257f0E02e67c3c2777A08";
+  // Define the master contract (factory)
+  const factoryAddress = "0x9A7197E2f9e282eFba0061E81b358922bb856e1a";
   
-  // Define the parameters for the collection
+  // Define the parameters for the new NFT collection
   const name = "MyNFTCollection";
   const symbol = "MNC";
-  const mintPrice = ethers.parseEther("0.05"); // 0.05 ETH mint price
+  const mintPrice = ethers.parseEther("0.00001"); // 0.00001 ETH mint price
   const maxSupply = 10000;
-  const baseURI = "https://example.com/metadata/";
+  const baseURI = "ipfs://bafybeiafuvw7zyjo3kmeok6i4lkfwungtp4rzirng6j4vkispln7vp64xi/";
   const recipient = "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a"; // Replace with the actual recipient address
   const royaltyRecipient = "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a"; // Replace with the actual royalty recipient address
-  const royaltyPercentage = 500; // 5% royalties (500 basis points)
+  const royaltyPercentage = 500; // 5% royalties 
 
-  // Connect to the deployed factory contract
+  // Get the factory contract instance
   const factory = await ethers.getContractAt("MintPadERC721Factory", factoryAddress);
 
-  // Ensure the factory contract requires a platform fee
-  const platformFee = await factory.PLATFORM_FEE(); // Hardcoded to 0.00038 ETH
+  // Retrieve the platform fee from the factory contract
+  const platformFee = await factory.PLATFORM_FEE();
 
-  // Deploy the collection by sending the required platform fee
+  // Deploy a new collection with the specified parameters
   const tx = await factory.deployCollection(
     name,
     symbol,
@@ -33,12 +33,14 @@ async function main() {
     { value: platformFee }
   );
 
-  console.log("Transaction sent: ", tx.hash);
+  console.log("Transaction sent:", tx.hash);
 
   // Wait for the transaction to be mined
   const receipt = await tx.wait();
 
-  console.log("Collection deployed at: ", receipt.events[0].args.collectionAddress);
+  // Extract and log the deployed collection's address from the event logs
+  const collectionAddress = receipt.events[0].args.collectionAddress;
+  console.log("Collection deployed at:", collectionAddress);
 }
 
 main()

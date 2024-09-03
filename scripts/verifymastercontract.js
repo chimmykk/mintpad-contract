@@ -1,7 +1,7 @@
 const { ethers, run } = require("hardhat");
 
 async function main() {
-  const contractAddress = "0xeb26D2c712da16b3651243e9774979842427411e"; // Replace with your MasterNFTFactory contract address
+  const contractAddress = "0x0841B86c1b9CE6B4F7abf327adD7DE8F8A3a9762"; // Replace with your MasterNFTFactory contract address
 
   console.log("Verifying contract at address:", contractAddress);
 
