@@ -7,10 +7,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
-/**
- * @title Mintpad ERC-721 Template
- * @dev ERC721 NFT collection contract with adjustable mint price, base URI, max supply, and royalties.
- */
 contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     using Address for address payable;
     using Strings for uint256;
@@ -20,25 +16,29 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     string private baseTokenURI;
     address payable public recipient;
 
-
     uint256 public mintStartTime;
     uint256 public mintEndTime;
 
     uint256 public royaltyPercentage;
     address payable public royaltyRecipient;
 
-    /**
-     * @dev Initializes the contract with specified parameters.
-     * @param name The name of the NFT collection.
-     * @param symbol The symbol of the NFT collection.
-     * @param _mintPrice The price to mint each NFT in wei.
-     * @param _maxSupply The maximum number of NFTs in the collection.
-     * @param _baseTokenURI The base URI for the NFT metadata.
-     * @param _recipient The address to receive the funds from minted NFTs.
-     * @param _royaltyRecipient The address to receive royalty payments.
-     * @param _royaltyPercentage The royalty percentage (e.g., 500 for 5%).
-     * @param owner The owner of the NFT collection.
-     */
+    enum MintPhase { None, Public, Whitelist }
+    MintPhase public currentMintPhase;
+
+    mapping(address => bool) public whitelist;
+    mapping(address => uint256) public whitelistMinted;
+
+    uint256 public publicMintLimit;
+    uint256 public whitelistMintLimit;
+
+    uint256 public publicPhaseSupply;
+    uint256 public whitelistPhaseSupply;
+
+    modifier onlyDeployer() {
+        require(msg.sender == owner(), "No");
+        _;
+    }
+
     constructor(
         string memory name,
         string memory symbol,
@@ -50,7 +50,7 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
         uint256 _royaltyPercentage,
         address owner
     ) ERC721(name, symbol) Ownable(owner) {
-        require(_royaltyPercentage <= 10000, "Royalty percentage too high");
+        require(_royaltyPercentage <= 10000);
 
         mintPrice = _mintPrice;
         maxSupply = _maxSupply;
@@ -60,65 +60,85 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
         royaltyPercentage = _royaltyPercentage;
     }
 
-    /**
-     * @notice Mints a new NFT.
-     * @param tokenId The ID of the token to mint.
-     */
     function mint(uint256 tokenId) external payable {
-        require(totalSupply() < maxSupply, "Max supply reached.");
-        require(msg.value == mintPrice, "Incorrect Ether value.");
-        require(block.timestamp >= mintStartTime && block.timestamp <= mintEndTime, "Minting not allowed at this time.");
+        require(totalSupply() < maxSupply);
+        require(msg.value == mintPrice);
+        require(block.timestamp >= mintStartTime && block.timestamp <= mintEndTime);
 
-        // Transfer funds
+        if (currentMintPhase == MintPhase.Whitelist) {
+            require(whitelist[msg.sender]);
+            require(whitelistMinted[msg.sender] < whitelistMintLimit);
+            whitelistMinted[msg.sender]++;
+        } else if (currentMintPhase == MintPhase.Public) {
+            require(publicMintLimit == 0 || balanceOf(msg.sender) < publicMintLimit);
+        } else {
+            revert("error");
+        }
+
         recipient.sendValue(msg.value);
-
         _safeMint(msg.sender, tokenId);
     }
 
-    /**
-     * @notice Sets the base URI for the token metadata.
-     * @param _baseTokenURI The new base URI.
-     */
-    function setBaseURI(string memory _baseTokenURI) external onlyOwner {
+    function setBaseURI(string memory _baseTokenURI) external onlyDeployer {
         baseTokenURI = _baseTokenURI;
     }
 
-    /**
-     * @notice Sets the mint phase (start and end time).
-     * @param _mintStartTime The start time of the mint phase.
-     * @param _mintEndTime The end time of the mint phase.
-     */
-    function setMintPhase(uint256 _mintStartTime, uint256 _mintEndTime) external onlyOwner {
+    function setMintPhase(
+        uint256 _mintStartTime,
+        uint256 _mintEndTime,
+        MintPhase _mintPhase,
+        uint256 _phaseSupply,
+        uint256 _phaseMintPrice,
+        uint256 _phaseMintLimit
+    ) external onlyDeployer {
+        require(_phaseSupply > 0);
+        require(_phaseSupply <= maxSupply - totalSupply());
+        require(_phaseMintPrice > 0);
+        require(_phaseMintLimit > 0);
+
         mintStartTime = _mintStartTime;
         mintEndTime = _mintEndTime;
+        currentMintPhase = _mintPhase;
+        mintPrice = _phaseMintPrice;
+
+        if (currentMintPhase == MintPhase.Public) {
+            publicPhaseSupply = _phaseSupply;
+            publicMintLimit = _phaseMintLimit;
+        } else if (currentMintPhase == MintPhase.Whitelist) {
+            whitelistPhaseSupply = _phaseSupply;
+            whitelistMintLimit = _phaseMintLimit;
+        } else {
+            revert("Invalid");
+        }
+    }
+    function setWhitelist(address[] memory _addresses, bool _status) external onlyDeployer {
+        for (uint256 i = 0; i < _addresses.length; i++) {
+            whitelist[_addresses[i]] = _status;
+        }
     }
 
-    /**
-     * @notice Sets the royalty percentage and recipient.
-     * @param _royaltyRecipient The address to receive royalty payments.
-     * @param _royaltyPercentage The royalty percentage.
-     */
-    function setRoyalties(address payable _royaltyRecipient, uint256 _royaltyPercentage) external onlyOwner {
-        require(_royaltyPercentage <= 10000, "Royalty percentage too high");
+    function setMintLimits(uint256 _publicMintLimit, uint256 _whitelistMintLimit) external onlyDeployer {
+        publicMintLimit = _publicMintLimit;
+        whitelistMintLimit = _whitelistMintLimit;
+    }
+    function setRoyalties(address payable _royaltyRecipient, uint256 _royaltyPercentage) external onlyDeployer {
+        require(_royaltyPercentage <= 10000);
         royaltyRecipient = _royaltyRecipient;
         royaltyPercentage = _royaltyPercentage;
     }
 
-    /**
-     * @dev Returns the base URI set for the metadata.
-     */
+    function setRecipient(address payable _recipient) external onlyDeployer {
+        recipient = _recipient;
+    }
+
+    function setMintPrice(uint256 _mintPrice) external onlyDeployer {
+        mintPrice = _mintPrice;
+    }
     function _baseURI() internal view virtual override returns (string memory) {
         return baseTokenURI;
     }
-
-    /**
-     * @notice Returns the metadata URI for a given token ID.
-     * @param tokenId The ID of the token.
-     * @return The metadata URI for the token.
-     */
-function tokenURI(uint256 tokenId) public view override returns (string memory) {
-    require(ownerOf(tokenId) != address(0), "ERC721Metadata: URI query for nonexistent token");
-    return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
-}
-
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        require(ownerOf(tokenId) != address(0));
+        return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
+    }
 }

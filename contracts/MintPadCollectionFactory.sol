@@ -10,18 +10,40 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 /**
  * @title MintPad Master Contract Factory
  * @dev This contract deploys individual ERC721 and ERC1155 NFT collection contracts with customizable parameters.
+ *      The contract uses UUPSUpgradeable for upgradeability and charges a platform fee for each collection deployed.
  */
 contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     using Address for address payable;
 
-    /// @dev Hardcoded platform wallet address
+    /// @dev Platform wallet address where fees are sent.
     address public constant platformAddress = 0x9ce7502008734772935A538Fb829741153Ca74f0;
 
-    /// @dev Hardcoded platform fee (0.00038 ETH)
+    /// @dev Platform fee for deploying collections (0.00038 ETH).
     uint256 public constant PLATFORM_FEE = 0.00038 ether;
 
-    event CollectionDeployed(address indexed collectionAddress, address indexed owner, uint256 mintPrice, uint256 maxSupply, string baseURI);
-    event ERC1155CollectionDeployed(address indexed collectionAddress, address indexed owner, uint256 mintPrice, uint256 maxSupply, string baseURI);
+    event CollectionDeployed(
+        address indexed collectionAddress,
+        address indexed owner,
+        uint256 mintPrice,
+        uint256 maxSupply,
+        string baseURI
+    );
+
+    event ERC1155CollectionDeployed(
+        address indexed collectionAddress,
+        address indexed owner,
+        uint256 mintPrice,
+        uint256 maxSupply,
+        string baseURI
+    );
+
+    /**
+     * @dev Initializes the upgradeable contract.
+     *      Replaces the constructor due to UUPS pattern.
+     */
+    function initialize() external initializer {
+        __Ownable_init();
+    }
 
     /**
      * @dev Ensures that only the contract owner can authorize upgrades.
@@ -50,8 +72,12 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         address payable royaltyRecipient,
         uint256 royaltyPercentage
     ) external payable {
-        require(msg.value == PLATFORM_FEE, "Incorrect platform fee.");
+        require(msg.value == PLATFORM_FEE);
+
+        // Transfer the platform fee to the platform address
         Address.sendValue(payable(platformAddress), PLATFORM_FEE);
+
+        // Deploy a new ERC-721 collection
         MintpadERC721Collection newCollection = new MintpadERC721Collection(
             name,
             symbol,
@@ -64,6 +90,7 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
             msg.sender
         );
 
+        // Emit the event for the new ERC-721 collection deployment
         emit CollectionDeployed(address(newCollection), msg.sender, mintPrice, maxSupply, baseURI);
     }
 
@@ -88,8 +115,12 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         address payable royaltyRecipient,
         uint256 royaltyPercentage
     ) external payable {
-        require(msg.value == PLATFORM_FEE, "Incorrect platform fee.");
+        require(msg.value == PLATFORM_FEE, "");
+
+        // Transfer the platform fee to the platform address
         Address.sendValue(payable(platformAddress), PLATFORM_FEE);
+
+        // Deploy a new ERC-1155 collection
         MintpadERC1155Collection newCollection = new MintpadERC1155Collection(
             collectionName,
             collectionSymbol,
@@ -102,6 +133,7 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
             msg.sender
         );
 
+        // Emit the event for the new ERC-1155 collection deployment
         emit ERC1155CollectionDeployed(address(newCollection), msg.sender, mintPrice, maxSupply, baseTokenURI);
     }
 }

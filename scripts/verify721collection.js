@@ -1,7 +1,7 @@
 const { run, ethers } = require("hardhat");
 
 async function main() {
-  const contractAddress = "0x849444e01eADa732610356A51e90cd1C26cAe670"; // Replace with deployed collection address
+  const contractAddress = "0xb012032613E957c13acC3b806bE4E60f6Fc0e701"; // Replace with deployed collection address
 
   const args = [
     "MyNFTCollection", // name
@@ -12,7 +12,7 @@ async function main() {
     "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a", // recipient address for minting funds
     "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a", // royalty recipient address
     500, // royaltyPercentage 
-    "0xbEc50cA74830c67b55CbEaf79feD8517E9d9b3B2" // owner address
+    "0x68EB182aF9DC1e818798F5EA75F061D9cA7CC76a" // owner address
   ];
 
   try {

@@ -14,6 +14,9 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     using Address for address payable;
     using Strings for uint256;
 
+    enum MintPhase { None, Public, Whitelist }
+    MintPhase public currentMintPhase;
+
     string public collectionName;
     string public collectionSymbol;
     uint256 public mintPrice;
@@ -25,18 +28,24 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     uint256 public royaltyPercentage;
     address payable public royaltyRecipient;
 
-    /**
-     * @dev Initializes the contract with specified parameters.
-     * @param _collectionName The name of the NFT collection.
-     * @param _collectionSymbol The symbol of the NFT collection.
-     * @param _baseTokenURI The base URI for the NFT metadata.
-     * @param _mintPrice The price to mint each NFT in wei.
-     * @param _maxSupply The maximum number of NFTs in the collection.
-     * @param _recipient The address to receive the funds from minted NFTs.
-     * @param _royaltyRecipient The address to receive royalty payments.
-     * @param _royaltyPercentage The royalty percentage (e.g., 500 for 5%).
-     * @param owner The owner of the NFT collection.
-     */
+    // Mint phase parameters
+    uint256 public mintStartTime;
+    uint256 public mintEndTime;
+
+    uint256 public publicMintLimit;
+    uint256 public whitelistMintLimit;
+    
+    uint256 public publicPhaseSupply;
+    uint256 public whitelistPhaseSupply;
+
+    mapping(address => bool) public whitelist;
+    mapping(address => uint256) public whitelistMinted;
+
+    modifier onlyDeployer() {
+        require(msg.sender == owner());
+        _;
+    }
+
     constructor(
         string memory _collectionName,
         string memory _collectionSymbol,
@@ -48,7 +57,7 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         uint256 _royaltyPercentage,
         address owner
     ) ERC1155(_baseTokenURI) Ownable(owner) {
-        require(_royaltyPercentage <= 10000, "Royalty percentage too high");
+        require(_royaltyPercentage <= 10000, "");
 
         collectionName = _collectionName;
         collectionSymbol = _collectionSymbol;
@@ -60,49 +69,88 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         royaltyPercentage = _royaltyPercentage;
     }
 
-    /**
-     * @notice Mints a new NFT.
-     * @param id The ID of the token to mint.
-     * @param amount The number of tokens to mint.
-     */
     function mint(uint256 id, uint256 amount) external payable {
-        require(currentSupply + amount <= maxSupply, "Max supply reached.");
-        require(msg.value == mintPrice * amount, "Incorrect Ether value.");
+        require(currentSupply + amount <= maxSupply);
+        require(msg.value == mintPrice * amount);
+        require(block.timestamp >= mintStartTime && block.timestamp <= mintEndTime);
+        
+        if (currentMintPhase == MintPhase.Whitelist) {
+            require(whitelist[msg.sender]);
+            require(whitelistMinted[msg.sender] + amount <= whitelistMintLimit);
+            whitelistMinted[msg.sender] += amount;
+        } else if (currentMintPhase == MintPhase.Public) {
+            require(publicMintLimit == 0 || balanceOf(msg.sender, id) + amount <= publicMintLimit);
+        } else {
+            revert("not set");
+        }
 
-        // Transfer funds
         recipient.sendValue(msg.value);
-
         _mint(msg.sender, id, amount, "");
         currentSupply += amount;
     }
 
-    /**
-     * @notice Sets the base URI for the token metadata.
-     * @param _baseTokenURI The new base URI.
-     */
     function setBaseURI(string memory _baseTokenURI) external onlyOwner {
         baseTokenURI = _baseTokenURI;
         _setURI(baseTokenURI);
     }
 
-    /**
-     * @notice Sets the royalty percentage and recipient.
-     * @param _royaltyRecipient The address to receive royalty payments.
-     * @param _royaltyPercentage The royalty percentage.
-     */
+    function setMintPhase(
+        uint256 _mintStartTime,
+        uint256 _mintEndTime,
+        MintPhase _mintPhase,
+        uint256 _phaseSupply,
+        uint256 _phaseMintPrice,
+        uint256 _phaseMintLimit
+    ) external onlyOwner {
+        require(_phaseSupply > 0);
+        require(_phaseSupply <= maxSupply - currentSupply);
+        require(_phaseMintPrice > 0);
+        require(_phaseMintLimit > 0);
+
+        mintStartTime = _mintStartTime;
+        mintEndTime = _mintEndTime;
+        currentMintPhase = _mintPhase;
+
+        if (currentMintPhase == MintPhase.Public) {
+            publicPhaseSupply = _phaseSupply;
+            publicMintLimit = _phaseMintLimit;
+            mintPrice = _phaseMintPrice;
+        } else if (currentMintPhase == MintPhase.Whitelist) {
+            whitelistPhaseSupply = _phaseSupply;
+            whitelistMintLimit = _phaseMintLimit;
+            mintPrice = _phaseMintPrice;
+        } else {
+            revert("not set");
+        }
+    }
+
+    function setWhitelist(address[] memory _addresses, bool _status) external onlyOwner {
+        for (uint256 i = 0; i < _addresses.length; i++) {
+            whitelist[_addresses[i]] = _status;
+        }
+    }
+
+    function setMintLimits(uint256 _publicMintLimit, uint256 _whitelistMintLimit) external onlyOwner {
+        publicMintLimit = _publicMintLimit;
+        whitelistMintLimit = _whitelistMintLimit;
+    }
+
     function setRoyalties(address payable _royaltyRecipient, uint256 _royaltyPercentage) external onlyOwner {
-        require(_royaltyPercentage <= 10000, "Royalty percentage too high");
+        require(_royaltyPercentage <= 10000);
         royaltyRecipient = _royaltyRecipient;
         royaltyPercentage = _royaltyPercentage;
     }
 
-    /**
-     * @dev Returns the metadata URI for a given token ID.
-     * @param tokenId The ID of the token.
-     * @return The metadata URI for the token.
-     */
+    function setRecipient(address payable _recipient) external onlyOwner {
+        recipient = _recipient;
+    }
+
+    function setMintPrice(uint256 _mintPrice) external onlyOwner {
+        mintPrice = _mintPrice;
+    }
+
     function uri(uint256 tokenId) public view override returns (string memory) {
-        require(bytes(baseTokenURI).length > 0, "ERC1155Metadata: Base URI not set");
+        require(bytes(baseTokenURI).length > 0);
         return string(abi.encodePacked(baseTokenURI, tokenId.toString()));
     }
 }
