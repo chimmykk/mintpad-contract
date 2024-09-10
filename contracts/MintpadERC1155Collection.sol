@@ -27,8 +27,6 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
     uint256 public royaltyPercentage;
     address payable public royaltyRecipient;
-
-    // Mint phase parameters
     uint256 public mintStartTime;
     uint256 public mintEndTime;
 
@@ -55,9 +53,9 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         address payable _recipient,
         address payable _royaltyRecipient,
         uint256 _royaltyPercentage,
-        address owner
-    ) ERC1155(_baseTokenURI) Ownable(owner) {
-        require(_royaltyPercentage <= 10000, "");
+        address _owner
+    ) ERC1155(_baseTokenURI) Ownable(_owner) {
+        require(_royaltyPercentage <= 10000);
 
         collectionName = _collectionName;
         collectionSymbol = _collectionSymbol;
@@ -73,7 +71,7 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         require(currentSupply + amount <= maxSupply);
         require(msg.value == mintPrice * amount);
         require(block.timestamp >= mintStartTime && block.timestamp <= mintEndTime);
-        
+
         if (currentMintPhase == MintPhase.Whitelist) {
             require(whitelist[msg.sender]);
             require(whitelistMinted[msg.sender] + amount <= whitelistMintLimit);
@@ -81,7 +79,7 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         } else if (currentMintPhase == MintPhase.Public) {
             require(publicMintLimit == 0 || balanceOf(msg.sender, id) + amount <= publicMintLimit);
         } else {
-            revert("not set");
+            revert();
         }
 
         recipient.sendValue(msg.value);
@@ -97,30 +95,39 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     function setMintPhase(
         uint256 _mintStartTime,
         uint256 _mintEndTime,
-        MintPhase _mintPhase,
-        uint256 _phaseSupply,
-        uint256 _phaseMintPrice,
-        uint256 _phaseMintLimit
+        MintPhase _mintPhase
     ) external onlyOwner {
-        require(_phaseSupply > 0);
-        require(_phaseSupply <= maxSupply - currentSupply);
-        require(_phaseMintPrice > 0);
-        require(_phaseMintLimit > 0);
-
         mintStartTime = _mintStartTime;
         mintEndTime = _mintEndTime;
         currentMintPhase = _mintPhase;
+        require(
+            (currentMintPhase == MintPhase.Public && publicPhaseSupply > 0 && mintPrice > 0 && publicMintLimit > 0) ||
+            (currentMintPhase == MintPhase.Whitelist && whitelistPhaseSupply > 0 && mintPrice > 0 && whitelistMintLimit > 0)
+       
+        );
+    }
 
+    function setMintPhaseSettings(
+        uint256 _publicPhaseSupply,
+        uint256 _whitelistPhaseSupply,
+        uint256 _publicMintLimit,
+        uint256 _whitelistMintLimit,
+        uint256 _mintPrice
+    ) external onlyOwner {
         if (currentMintPhase == MintPhase.Public) {
-            publicPhaseSupply = _phaseSupply;
-            publicMintLimit = _phaseMintLimit;
-            mintPrice = _phaseMintPrice;
+            require(_publicPhaseSupply > 0);
+            require(_publicPhaseSupply <= maxSupply - currentSupply);
+            publicPhaseSupply = _publicPhaseSupply;
+            publicMintLimit = _publicMintLimit;
+            mintPrice = _mintPrice;
         } else if (currentMintPhase == MintPhase.Whitelist) {
-            whitelistPhaseSupply = _phaseSupply;
-            whitelistMintLimit = _phaseMintLimit;
-            mintPrice = _phaseMintPrice;
+            require(_whitelistPhaseSupply > 0);
+            require(_whitelistPhaseSupply <= maxSupply - currentSupply);
+            whitelistPhaseSupply = _whitelistPhaseSupply;
+            whitelistMintLimit = _whitelistMintLimit;
+            mintPrice = _mintPrice;
         } else {
-            revert("not set");
+            revert();
         }
     }
 

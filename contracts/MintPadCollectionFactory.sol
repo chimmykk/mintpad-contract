@@ -16,10 +16,16 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     using Address for address payable;
 
     /// @dev Platform wallet address where fees are sent.
-    address public constant platformAddress = 0x9ce7502008734772935A538Fb829741153Ca74f0;
+    address public constant PLATFORM_ADDRESS = 0xbEc50cA74830c67b55CbEaf79feD8517E9d9b3B2;
 
     /// @dev Platform fee for deploying collections (0.00038 ETH).
-    uint256 public constant PLATFORM_FEE = 0.00038 ether;
+    uint256 public platformFee;
+
+    /// @dev Maximum royalty percentage (in basis points, where 10000 = 100%).
+    uint256 public constant MAX_ROYALTY_PERCENTAGE = 10000;
+
+    /// @dev Address of the contract deployer
+    address public deployer;
 
     event CollectionDeployed(
         address indexed collectionAddress,
@@ -37,12 +43,19 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         string baseURI
     );
 
+    event PlatformFeeUpdated(uint256 newFee);
+
     /**
-     * @dev Initializes the upgradeable contract.
-     *      Replaces the constructor due to UUPS pattern.
-     */
+    * @dev Initializes the upgradeable contract.
+    *      Replaces the constructor due to UUPS pattern.
+    *      Sets the deployer address and initial platform fee.
+    *      Only the platform address can call this function.
+    */
     function initialize() external initializer {
+        require(msg.sender == PLATFORM_ADDRESS, "Only the platform address can initialize");
         __Ownable_init();
+        deployer = msg.sender; // Set the deployer as the contract creator
+        platformFee = 0.00038 ether; // Set initial platform fee
     }
 
     /**
@@ -72,10 +85,13 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         address payable royaltyRecipient,
         uint256 royaltyPercentage
     ) external payable {
-        require(msg.value == PLATFORM_FEE);
+        require(msg.value == platformFee);
 
         // Transfer the platform fee to the platform address
-        Address.sendValue(payable(platformAddress), PLATFORM_FEE);
+        Address.sendValue(payable(PLATFORM_ADDRESS), platformFee);
+
+        // Ensure royalty percentage is within the maximum allowed
+        require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE);
 
         // Deploy a new ERC-721 collection
         MintpadERC721Collection newCollection = new MintpadERC721Collection(
@@ -115,10 +131,13 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         address payable royaltyRecipient,
         uint256 royaltyPercentage
     ) external payable {
-        require(msg.value == PLATFORM_FEE, "");
+        require(msg.value == platformFee);
 
         // Transfer the platform fee to the platform address
-        Address.sendValue(payable(platformAddress), PLATFORM_FEE);
+        Address.sendValue(payable(PLATFORM_ADDRESS), platformFee);
+
+        // Ensure royalty percentage is within the maximum allowed
+        require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE);
 
         // Deploy a new ERC-1155 collection
         MintpadERC1155Collection newCollection = new MintpadERC1155Collection(
@@ -136,4 +155,19 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         // Emit the event for the new ERC-1155 collection deployment
         emit ERC1155CollectionDeployed(address(newCollection), msg.sender, mintPrice, maxSupply, baseTokenURI);
     }
+
+    /**
+     * @dev Updates the platform fee. Can only be called by the platform address.
+     * @param newFee The new platform fee in wei.
+     */
+    function updatePlatformFee(uint256 newFee) external {
+        require(msg.sender == PLATFORM_ADDRESS, "Only platform address can update");
+        platformFee = newFee;
+        emit PlatformFeeUpdated(newFee);
+    }
+
+    /**
+     * @dev Fallback function to receive Ether.
+     */
+    receive() external payable {}
 }
