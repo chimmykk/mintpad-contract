@@ -52,7 +52,7 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     *      Only the platform address can call this function.
     */
     function initialize() external initializer {
-        require(msg.sender == PLATFORM_ADDRESS, "Only the platform address can initialize");
+        require(msg.sender == PLATFORM_ADDRESS);
         __Ownable_init();
         deployer = msg.sender; // Set the deployer as the contract creator
         platformFee = 0.00038 ether; // Set initial platform fee
@@ -132,14 +132,9 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         uint256 royaltyPercentage
     ) external payable {
         require(msg.value == platformFee);
-
-        // Transfer the platform fee to the platform address
         Address.sendValue(payable(PLATFORM_ADDRESS), platformFee);
-
-        // Ensure royalty percentage is within the maximum allowed
         require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE);
 
-        // Deploy a new ERC-1155 collection
         MintpadERC1155Collection newCollection = new MintpadERC1155Collection(
             collectionName,
             collectionSymbol,
@@ -161,7 +156,7 @@ contract MintPadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
      * @param newFee The new platform fee in wei.
      */
     function updatePlatformFee(uint256 newFee) external {
-        require(msg.sender == PLATFORM_ADDRESS, "Only platform address can update");
+        require(msg.sender == PLATFORM_ADDRESS);
         platformFee = newFee;
         emit PlatformFeeUpdated(newFee);
     }

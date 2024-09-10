@@ -107,29 +107,38 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         );
     }
 
-    function setMintPhaseSettings(
-        uint256 _publicPhaseSupply,
-        uint256 _whitelistPhaseSupply,
-        uint256 _publicMintLimit,
-        uint256 _whitelistMintLimit,
-        uint256 _mintPrice
-    ) external onlyOwner {
-        if (currentMintPhase == MintPhase.Public) {
-            require(_publicPhaseSupply > 0);
-            require(_publicPhaseSupply <= maxSupply - currentSupply);
-            publicPhaseSupply = _publicPhaseSupply;
-            publicMintLimit = _publicMintLimit;
-            mintPrice = _mintPrice;
-        } else if (currentMintPhase == MintPhase.Whitelist) {
-            require(_whitelistPhaseSupply > 0);
-            require(_whitelistPhaseSupply <= maxSupply - currentSupply);
-            whitelistPhaseSupply = _whitelistPhaseSupply;
-            whitelistMintLimit = _whitelistMintLimit;
-            mintPrice = _mintPrice;
-        } else {
-            revert();
-        }
+ function setMintPhaseSettings(
+    uint256 _publicPhaseSupply,
+    uint256 _whitelistPhaseSupply,
+    uint256 _publicMintLimit,
+    uint256 _whitelistMintLimit,
+    uint256 _mintPrice,
+    uint256 _mintStartTime,
+    uint256 _mintEndTime
+) external onlyOwner {
+    require(_mintStartTime < _mintEndTime);
+    
+    if (currentMintPhase == MintPhase.Public) {
+        require(_publicPhaseSupply > 0);
+        require(_publicPhaseSupply <= maxSupply - currentSupply);
+        publicPhaseSupply = _publicPhaseSupply;
+        publicMintLimit = _publicMintLimit;
+        mintPrice = _mintPrice;
+        mintStartTime = _mintStartTime;
+        mintEndTime = _mintEndTime;
+    } else if (currentMintPhase == MintPhase.Whitelist) {
+        require(_whitelistPhaseSupply > 0);
+        require(_whitelistPhaseSupply <= maxSupply - currentSupply);
+        whitelistPhaseSupply = _whitelistPhaseSupply;
+        whitelistMintLimit = _whitelistMintLimit;
+        mintPrice = _mintPrice;
+        mintStartTime = _mintStartTime;
+        mintEndTime = _mintEndTime;
+    } else {
+        revert();
     }
+}
+
 
     function setWhitelist(address[] memory _addresses, bool _status) external onlyOwner {
         for (uint256 i = 0; i < _addresses.length; i++) {

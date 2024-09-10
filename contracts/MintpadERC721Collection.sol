@@ -29,6 +29,8 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
         uint256 supply;
         uint256 mintPrice;
         uint256 mintLimit;
+        uint256 mintStartTime;
+        uint256 mintEndTime;
     }
 
     mapping(MintPhase => PhaseSettings) public phaseSettings;
@@ -64,7 +66,7 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     function mint(uint256 tokenId) external payable {
         require(totalSupply() < maxSupply);
         require(mintPrice == phaseSettings[currentMintPhase].mintPrice);
-        require(block.timestamp >= mintStartTime && block.timestamp <= mintEndTime);
+        require(block.timestamp >= phaseSettings[currentMintPhase].mintStartTime && block.timestamp <= phaseSettings[currentMintPhase].mintEndTime);
 
         if (currentMintPhase == MintPhase.Whitelist) {
             require(whitelist[msg.sender]);
@@ -84,7 +86,9 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
         MintPhase _phase,
         uint256 _supply,
         uint256 _mintLimit,
-        uint256 _mintPrice
+        uint256 _mintPrice,
+        uint256 _mintStartTime,
+        uint256 _mintEndTime
     ) external onlyDeployer {
         require(_supply > 0);
         require(_supply <= maxSupply - totalSupply());
@@ -92,7 +96,9 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
         phaseSettings[_phase] = PhaseSettings({
             supply: _supply,
             mintPrice: _mintPrice,
-            mintLimit: _mintLimit
+            mintLimit: _mintLimit,
+            mintStartTime: _mintStartTime,
+            mintEndTime: _mintEndTime
         });
     }
 

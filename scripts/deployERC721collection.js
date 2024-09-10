@@ -2,7 +2,7 @@ const { ethers } = require("hardhat");
 
 async function main() {
   // Define the master contract (factory)
-  const factoryAddress = "0x438191e080124D14355b69A1352dcc22517493Cc";
+  const factoryAddress = "0x1BFaB8cF628724eA6B34d2463e846089Cb417E0c";
 
   // Define the parameters for the new NFT collection
   const name = "MyNFTCollection";
