@@ -3,7 +3,7 @@ const { ethers } = require("hardhat");
 async function main() {
   // Define the master contract (factory) address for ERC1155
   const factoryAddress = "0xFB28574be91719d14CfFE61Ba9fd89bd5B60A101"; // Replace with your ERC1155 factory contract address
-  
+
   // Define the parameters for the new ERC1155 collection
   const collectionName = "MyERC1155Collection";
   const collectionSymbol = "MERC1155";
@@ -18,7 +18,7 @@ async function main() {
   const factory = await ethers.getContractAt("MintPadCollectionFactory", factoryAddress);
 
   // Retrieve the platform fee from the factory contract
-  const platformFee = await factory.PLATFORM_FEE();
+  const platformFee = await factory.platformFee(); // Access platformFee as a public variable
 
   // Deploy a new ERC1155 collection with the specified parameters
   const tx = await factory.deployERC1155Collection(

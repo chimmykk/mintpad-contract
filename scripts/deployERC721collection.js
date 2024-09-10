@@ -2,8 +2,8 @@ const { ethers } = require("hardhat");
 
 async function main() {
   // Define the master contract (factory)
-  const factoryAddress = "0x28B3a7c0f335124DC8c9402FbF6ddA937a95fE2A";
-  
+  const factoryAddress = "0x438191e080124D14355b69A1352dcc22517493Cc";
+
   // Define the parameters for the new NFT collection
   const name = "MyNFTCollection";
   const symbol = "MNC";
@@ -18,7 +18,7 @@ async function main() {
   const factory = await ethers.getContractAt("MintPadCollectionFactory", factoryAddress);
 
   // Retrieve the platform fee from the factory contract
-  const platformFee = await factory.PLATFORM_FEE();
+  const platformFee = await factory.platformFee(); // Access platformFee as a public variable
 
   // Deploy a new collection with the specified parameters
   const tx = await factory.deployCollection(
@@ -39,7 +39,7 @@ async function main() {
   const receipt = await tx.wait();
 
   // Extract and log the deployed collection's address from the event logs
-  const collectionAddress = receipt.events[0].args.collectionAddress;
+  const collectionAddress = receipt.events.find(event => event.event === 'CollectionDeployed').args.collectionAddress;
   console.log("Collection deployed at:", collectionAddress);
 }
 
