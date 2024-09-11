@@ -2,7 +2,7 @@ const { ethers } = require("hardhat");
 
 async function main() {
   // Address of the deployed ERC721 collection
-  const contractAddress = "0x12A36080248184036bc066C72d55dBe269e46f8d"; // Replace with your deployed contract address
+  const contractAddress = "0xb0aab7d4f1d83f6b601baa3e68170b6c4c6261d4"; // Replace with your deployed contract address
 
   const [deployer] = await ethers.getSigners();
   const contract = await ethers.getContractAt("MintpadERC721Collection", contractAddress);
@@ -18,8 +18,8 @@ async function main() {
 
   }
 
-  const phaseIndex = 3;
-  const tokenId = 4;
+  const phaseIndex = 0;
+  const tokenId = 1;
 
   const [mintPrice] = await contract.getPhase(phaseIndex);
 

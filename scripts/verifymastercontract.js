@@ -1,7 +1,7 @@
 const { ethers, run } = require("hardhat");
 
 async function main() {
-  const contractAddress = "0xeF690Ad50695552e50F829B9103409521e56f597"; 
+  const contractAddress = "0x895aA2a45b30b1979AaC913D2162b719554b9a9C"; 
 
   console.log("Verifying contract at address:", contractAddress);
 
