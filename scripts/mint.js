@@ -18,8 +18,8 @@ async function main() {
 
   }
 
-  const phaseIndex = 2;
-  const tokenId = 2;
+  const phaseIndex = 3;
+  const tokenId = 4;
 
   const [mintPrice] = await contract.getPhase(phaseIndex);
 
