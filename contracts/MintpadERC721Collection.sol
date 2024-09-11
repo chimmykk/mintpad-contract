@@ -13,29 +13,24 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     using Strings for uint256;
     using MintpadLibrary for *;
 
-    uint256 public mintPrice;
     uint256 public maxSupply;
     string private baseTokenURI;
     address payable public recipient;
-    uint256 public mintStartTime;
-    uint256 public mintEndTime;
-    uint256 public royaltyPercentage;
     address payable public royaltyRecipient;
-
-    enum MintPhase { None, Public, Whitelist }
-    MintPhase public currentMintPhase;
+    uint256 public royaltyPercentage;
 
     struct PhaseSettings {
-        uint256 supply;
         uint256 mintPrice;
         uint256 mintLimit;
         uint256 mintStartTime;
         uint256 mintEndTime;
+        bool whitelistEnabled;
     }
 
-    mapping(MintPhase => PhaseSettings) public phaseSettings;
+    PhaseSettings[] public phases;
     mapping(address => bool) public whitelist;
     mapping(address => uint256) public whitelistMinted;
+    mapping(address => uint256) public publicMinted;
 
     modifier onlyDeployer() {
         require(msg.sender == owner());
@@ -45,7 +40,6 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
     constructor(
         string memory name,
         string memory symbol,
-        uint256 _mintPrice,
         uint256 _maxSupply,
         string memory _baseTokenURI,
         address payable _recipient,
@@ -54,8 +48,6 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
         address _owner
     ) ERC721(name, symbol) Ownable(_owner) {
         require(_royaltyPercentage <= 10000);
-
-        mintPrice = _mintPrice;
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
         recipient = _recipient;
@@ -63,43 +55,64 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
         royaltyPercentage = _royaltyPercentage;
     }
 
-    function mint(uint256 tokenId) external payable {
-        require(totalSupply() < maxSupply);
-        require(mintPrice == phaseSettings[currentMintPhase].mintPrice);
-        require(block.timestamp >= phaseSettings[currentMintPhase].mintStartTime && block.timestamp <= phaseSettings[currentMintPhase].mintEndTime);
+    function addMintPhase(
+        uint256 _mintPrice,
+        uint256 _mintLimit,
+        uint256 _mintStartTime,
+        uint256 _mintEndTime,
+        bool _whitelistEnabled
+    ) external onlyDeployer {
+        require(_mintStartTime < _mintEndTime);
+        phases.push(PhaseSettings({
+            mintPrice: _mintPrice,
+            mintLimit: _mintLimit,
+            mintStartTime: _mintStartTime,
+            mintEndTime: _mintEndTime,
+            whitelistEnabled: _whitelistEnabled
+        }));
+    }
 
-        if (currentMintPhase == MintPhase.Whitelist) {
+    function getPhase(uint256 phaseIndex) external view returns (
+        uint256 mintPrice,
+        uint256 mintLimit,
+        uint256 mintStartTime,
+        uint256 mintEndTime,
+        bool whitelistEnabled
+    ) {
+        require(phaseIndex < phases.length);
+        PhaseSettings memory phase = phases[phaseIndex];
+        return (
+            phase.mintPrice,
+            phase.mintLimit,
+            phase.mintStartTime,
+            phase.mintEndTime,
+            phase.whitelistEnabled
+        );
+    }
+
+    function getTotalPhases() external view returns (uint256) {
+        return phases.length;
+    }
+
+    function mint(uint256 phaseIndex, uint256 tokenId) external payable {
+        require(phaseIndex < phases.length);
+        PhaseSettings memory phase = phases[phaseIndex];
+
+        require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime);
+        require(totalSupply() < maxSupply);
+        require(msg.value == phase.mintPrice);
+
+        if (phase.whitelistEnabled) {
             require(whitelist[msg.sender]);
-            require(whitelistMinted[msg.sender] < phaseSettings[MintPhase.Whitelist].mintLimit);
+            require(whitelistMinted[msg.sender] < phase.mintLimit);
             whitelistMinted[msg.sender]++;
-        } else if (currentMintPhase == MintPhase.Public) {
-            require(balanceOf(msg.sender) < phaseSettings[MintPhase.Public].mintLimit);
         } else {
-            revert();
+            require(publicMinted[msg.sender] < phase.mintLimit);
+            publicMinted[msg.sender]++;
         }
 
         recipient.sendValue(msg.value);
         _safeMint(msg.sender, tokenId);
-    }
-
-    function setMintPhaseSettings(
-        MintPhase _phase,
-        uint256 _supply,
-        uint256 _mintLimit,
-        uint256 _mintPrice,
-        uint256 _mintStartTime,
-        uint256 _mintEndTime
-    ) external onlyDeployer {
-        require(_supply > 0);
-        require(_supply <= maxSupply - totalSupply());
-
-        phaseSettings[_phase] = PhaseSettings({
-            supply: _supply,
-            mintPrice: _mintPrice,
-            mintLimit: _mintLimit,
-            mintStartTime: _mintStartTime,
-            mintEndTime: _mintEndTime
-        });
     }
 
     function setWhitelist(address[] memory _addresses, bool _status) external onlyDeployer {
@@ -116,10 +129,6 @@ contract MintpadERC721Collection is ERC721Enumerable, Ownable {
 
     function setRecipient(address payable _recipient) external onlyDeployer {
         recipient = _recipient;
-    }
-
-    function setMintPrice(uint256 _mintPrice) external onlyDeployer {
-        mintPrice = _mintPrice;
     }
 
     function _baseURI() internal view virtual override returns (string memory) {

@@ -7,7 +7,7 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
- * @title Mintpad ERC-1155 Template
+ * @title Mintpad ERC-1155 Collection
  * @dev ERC1155 NFT collection contract with adjustable mint price, max supply, and royalties.
  */
 contract MintpadERC1155Collection is ERC1155, Ownable {
@@ -19,7 +19,6 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
     string public collectionName;
     string public collectionSymbol;
-    uint256 public mintPrice;
     uint256 public maxSupply;
     uint256 public currentSupply;
     string private baseTokenURI;
@@ -27,14 +26,16 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
     uint256 public royaltyPercentage;
     address payable public royaltyRecipient;
-    uint256 public mintStartTime;
-    uint256 public mintEndTime;
 
-    uint256 public publicMintLimit;
-    uint256 public whitelistMintLimit;
-    
-    uint256 public publicPhaseSupply;
-    uint256 public whitelistPhaseSupply;
+    struct PhaseSettings {
+        uint256 mintPrice;
+        uint256 mintLimit;
+        uint256 mintStartTime;
+        uint256 mintEndTime;
+    }
+
+    PhaseSettings public publicPhaseSettings;
+    PhaseSettings public whitelistPhaseSettings;
 
     mapping(address => bool) public whitelist;
     mapping(address => uint256) public whitelistMinted;
@@ -48,7 +49,6 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         string memory _collectionName,
         string memory _collectionSymbol,
         string memory _baseTokenURI,
-        uint256 _mintPrice,
         uint256 _maxSupply,
         address payable _recipient,
         address payable _royaltyRecipient,
@@ -59,7 +59,6 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
         collectionName = _collectionName;
         collectionSymbol = _collectionSymbol;
-        mintPrice = _mintPrice;
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
         recipient = _recipient;
@@ -69,15 +68,17 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
     function mint(uint256 id, uint256 amount) external payable {
         require(currentSupply + amount <= maxSupply);
+
+        uint256 mintPrice = getCurrentMintPrice();
         require(msg.value == mintPrice * amount);
-        require(block.timestamp >= mintStartTime && block.timestamp <= mintEndTime);
+        require(block.timestamp >= getMintStartTime() && block.timestamp <= getMintEndTime());
 
         if (currentMintPhase == MintPhase.Whitelist) {
             require(whitelist[msg.sender]);
-            require(whitelistMinted[msg.sender] + amount <= whitelistMintLimit);
+            require(whitelistMinted[msg.sender] + amount <= whitelistPhaseSettings.mintLimit);
             whitelistMinted[msg.sender] += amount;
         } else if (currentMintPhase == MintPhase.Public) {
-            require(publicMintLimit == 0 || balanceOf(msg.sender, id) + amount <= publicMintLimit);
+            require(publicPhaseSettings.mintLimit == 0 || balanceOf(msg.sender, id) + amount <= publicPhaseSettings.mintLimit);
         } else {
             revert();
         }
@@ -92,53 +93,85 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         _setURI(baseTokenURI);
     }
 
-    function setMintPhase(
+    function addMintPhase(
+        uint256 _mintPrice,
+        uint256 _mintLimit,
         uint256 _mintStartTime,
         uint256 _mintEndTime,
-        MintPhase _mintPhase
+        bool _whitelistEnabled
     ) external onlyOwner {
-        mintStartTime = _mintStartTime;
-        mintEndTime = _mintEndTime;
-        currentMintPhase = _mintPhase;
-        require(
-            (currentMintPhase == MintPhase.Public && publicPhaseSupply > 0 && mintPrice > 0 && publicMintLimit > 0) ||
-            (currentMintPhase == MintPhase.Whitelist && whitelistPhaseSupply > 0 && mintPrice > 0 && whitelistMintLimit > 0)
-       
+        require(_mintStartTime < _mintEndTime);
+
+        if (_whitelistEnabled) {
+            whitelistPhaseSettings = PhaseSettings({
+                mintPrice: _mintPrice,
+                mintLimit: _mintLimit,
+                mintStartTime: _mintStartTime,
+                mintEndTime: _mintEndTime
+            });
+            currentMintPhase = MintPhase.Whitelist;
+        } else {
+            publicPhaseSettings = PhaseSettings({
+                mintPrice: _mintPrice,
+                mintLimit: _mintLimit,
+                mintStartTime: _mintStartTime,
+                mintEndTime: _mintEndTime
+            });
+            currentMintPhase = MintPhase.Public;
+        }
+    }
+
+    function getCurrentMintPrice() public view returns (uint256) {
+        if (currentMintPhase == MintPhase.Public) {
+            return publicPhaseSettings.mintPrice;
+        } else if (currentMintPhase == MintPhase.Whitelist) {
+            return whitelistPhaseSettings.mintPrice;
+        } else {
+            revert();
+        }
+    }
+
+    function getMintStartTime() public view returns (uint256) {
+        if (currentMintPhase == MintPhase.Public) {
+            return publicPhaseSettings.mintStartTime;
+        } else if (currentMintPhase == MintPhase.Whitelist) {
+            return whitelistPhaseSettings.mintStartTime;
+        } else {
+            revert();
+        }
+    }
+
+    function getMintEndTime() public view returns (uint256) {
+        if (currentMintPhase == MintPhase.Public) {
+            return publicPhaseSettings.mintEndTime;
+        } else if (currentMintPhase == MintPhase.Whitelist) {
+            return whitelistPhaseSettings.mintEndTime;
+        } else {
+            revert();
+        }
+    }
+
+    function getPhaseSettings() external view returns (
+        uint256 publicMintPrice,
+        uint256 publicMintLimit,
+        uint256 publicMintStartTime,
+        uint256 publicMintEndTime,
+        uint256 whitelistMintPrice,
+        uint256 whitelistMintLimit,
+        uint256 whitelistMintStartTime,
+        uint256 whitelistMintEndTime
+    ) {
+        return (
+            publicPhaseSettings.mintPrice,
+            publicPhaseSettings.mintLimit,
+            publicPhaseSettings.mintStartTime,
+            publicPhaseSettings.mintEndTime,
+            whitelistPhaseSettings.mintPrice,
+            whitelistPhaseSettings.mintLimit,
+            whitelistPhaseSettings.mintStartTime,
+            whitelistPhaseSettings.mintEndTime
         );
     }
-
- function setMintPhaseSettings(
-    uint256 _publicPhaseSupply,
-    uint256 _whitelistPhaseSupply,
-    uint256 _publicMintLimit,
-    uint256 _whitelistMintLimit,
-    uint256 _mintPrice,
-    uint256 _mintStartTime,
-    uint256 _mintEndTime
-) external onlyOwner {
-    require(_mintStartTime < _mintEndTime);
-    
-    if (currentMintPhase == MintPhase.Public) {
-        require(_publicPhaseSupply > 0);
-        require(_publicPhaseSupply <= maxSupply - currentSupply);
-        publicPhaseSupply = _publicPhaseSupply;
-        publicMintLimit = _publicMintLimit;
-        mintPrice = _mintPrice;
-        mintStartTime = _mintStartTime;
-        mintEndTime = _mintEndTime;
-    } else if (currentMintPhase == MintPhase.Whitelist) {
-        require(_whitelistPhaseSupply > 0);
-        require(_whitelistPhaseSupply <= maxSupply - currentSupply);
-        whitelistPhaseSupply = _whitelistPhaseSupply;
-        whitelistMintLimit = _whitelistMintLimit;
-        mintPrice = _mintPrice;
-        mintStartTime = _mintStartTime;
-        mintEndTime = _mintEndTime;
-    } else {
-        revert();
-    }
-}
-
 
     function setWhitelist(address[] memory _addresses, bool _status) external onlyOwner {
         for (uint256 i = 0; i < _addresses.length; i++) {
@@ -147,8 +180,8 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     }
 
     function setMintLimits(uint256 _publicMintLimit, uint256 _whitelistMintLimit) external onlyOwner {
-        publicMintLimit = _publicMintLimit;
-        whitelistMintLimit = _whitelistMintLimit;
+        publicPhaseSettings.mintLimit = _publicMintLimit;
+        whitelistPhaseSettings.mintLimit = _whitelistMintLimit;
     }
 
     function setRoyalties(address payable _royaltyRecipient, uint256 _royaltyPercentage) external onlyOwner {
@@ -159,10 +192,6 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
     function setRecipient(address payable _recipient) external onlyOwner {
         recipient = _recipient;
-    }
-
-    function setMintPrice(uint256 _mintPrice) external onlyOwner {
-        mintPrice = _mintPrice;
     }
 
     function uri(uint256 tokenId) public view override returns (string memory) {
