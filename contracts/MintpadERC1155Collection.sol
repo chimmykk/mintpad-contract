@@ -1,201 +1,168 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.21;
 
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-
-/**
- * @title Mintpad ERC-1155 Collection
- * @dev ERC1155 NFT collection contract with adjustable mint price, max supply, and royalties.
- */
 contract MintpadERC1155Collection is ERC1155, Ownable {
     using Address for address payable;
     using Strings for uint256;
-
-    enum MintPhase { None, Public, Whitelist }
-    MintPhase public currentMintPhase;
-
-    string public collectionName;
-    string public collectionSymbol;
-    uint256 public maxSupply;
-    uint256 public currentSupply;
-    string private baseTokenURI;
-    address payable public recipient;
-
-    uint256 public royaltyPercentage;
-    address payable public royaltyRecipient;
-
     struct PhaseSettings {
         uint256 mintPrice;
         uint256 mintLimit;
         uint256 mintStartTime;
         uint256 mintEndTime;
+        bool whitelistEnabled;
     }
+    //check
 
-    PhaseSettings public publicPhaseSettings;
-    PhaseSettings public whitelistPhaseSettings;
+    uint256 public maxSupply;
+    string private baseTokenURI;
+    string private preRevealURI;
+    bool public revealState;
 
+    string private _collectionName;
+    string private _collectionSymbol;
+
+    address payable[] public salesRecipients;
+    uint256[] public salesShares;
+    address payable[] public royaltyRecipients;
+    uint256[] public royaltyShares;
+    uint256 public royaltyPercentage;
+
+    PhaseSettings[] public phases;
     mapping(address => bool) public whitelist;
     mapping(address => uint256) public whitelistMinted;
+    mapping(address => uint256) public publicMinted;
+    mapping(uint256 => uint256) private _tokenSupply;
 
     modifier onlyDeployer() {
-        require(msg.sender == owner());
+        require(msg.sender == owner(), "Caller is not the owner");
         _;
     }
 
     constructor(
-        string memory _collectionName,
-        string memory _collectionSymbol,
-        string memory _baseTokenURI,
+        string memory _initialName,
+        string memory _initialSymbol,
         uint256 _maxSupply,
-        address payable _recipient,
-        address payable _royaltyRecipient,
+        string memory _baseTokenURI,
+        string memory _preRevealURI,
+        address payable[] memory _salesRecipients,
+        uint256[] memory _salesShares,
+        address payable[] memory _royaltyRecipients,
+        uint256[] memory _royaltyShares,
         uint256 _royaltyPercentage,
         address _owner
     ) ERC1155(_baseTokenURI) Ownable(_owner) {
-        require(_royaltyPercentage <= 10000);
+        require(_royaltyPercentage <= 10000, "");
+        require(_salesRecipients.length == _salesShares.length, "");
+        require(_royaltyRecipients.length == _royaltyShares.length, "");
 
-        collectionName = _collectionName;
-        collectionSymbol = _collectionSymbol;
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
-        recipient = _recipient;
-        royaltyRecipient = _royaltyRecipient;
+        preRevealURI = _preRevealURI;
+        salesRecipients = _salesRecipients;
+        salesShares = _salesShares;
+        royaltyRecipients = _royaltyRecipients;
+        royaltyShares = _royaltyShares;
         royaltyPercentage = _royaltyPercentage;
+
+        _collectionName = _initialName;
+        _collectionSymbol = _initialSymbol;
     }
 
-    function mint(uint256 id, uint256 amount) external payable {
-        require(currentSupply + amount <= maxSupply);
-
-        uint256 mintPrice = getCurrentMintPrice();
-        require(msg.value == mintPrice * amount);
-        require(block.timestamp >= getMintStartTime() && block.timestamp <= getMintEndTime());
-
-        if (currentMintPhase == MintPhase.Whitelist) {
-            require(whitelist[msg.sender]);
-            require(whitelistMinted[msg.sender] + amount <= whitelistPhaseSettings.mintLimit);
-            whitelistMinted[msg.sender] += amount;
-        } else if (currentMintPhase == MintPhase.Public) {
-            require(publicPhaseSettings.mintLimit == 0 || balanceOf(msg.sender, id) + amount <= publicPhaseSettings.mintLimit);
-        } else {
-            revert();
-        }
-
-        recipient.sendValue(msg.value);
-        _mint(msg.sender, id, amount, "");
-        currentSupply += amount;
-    }
-
-    function setBaseURI(string memory _baseTokenURI) external onlyOwner {
-        baseTokenURI = _baseTokenURI;
-        _setURI(baseTokenURI);
-    }
-
-    function addMintPhase(
-        uint256 _mintPrice,
-        uint256 _mintLimit,
-        uint256 _mintStartTime,
-        uint256 _mintEndTime,
-        bool _whitelistEnabled
-    ) external onlyOwner {
-        require(_mintStartTime < _mintEndTime);
-
-        if (_whitelistEnabled) {
-            whitelistPhaseSettings = PhaseSettings({
-                mintPrice: _mintPrice,
-                mintLimit: _mintLimit,
-                mintStartTime: _mintStartTime,
-                mintEndTime: _mintEndTime
-            });
-            currentMintPhase = MintPhase.Whitelist;
-        } else {
-            publicPhaseSettings = PhaseSettings({
-                mintPrice: _mintPrice,
-                mintLimit: _mintLimit,
-                mintStartTime: _mintStartTime,
-                mintEndTime: _mintEndTime
-            });
-            currentMintPhase = MintPhase.Public;
-        }
-    }
-
-    function getCurrentMintPrice() public view returns (uint256) {
-        if (currentMintPhase == MintPhase.Public) {
-            return publicPhaseSettings.mintPrice;
-        } else if (currentMintPhase == MintPhase.Whitelist) {
-            return whitelistPhaseSettings.mintPrice;
-        } else {
-            revert();
-        }
-    }
-
-    function getMintStartTime() public view returns (uint256) {
-        if (currentMintPhase == MintPhase.Public) {
-            return publicPhaseSettings.mintStartTime;
-        } else if (currentMintPhase == MintPhase.Whitelist) {
-            return whitelistPhaseSettings.mintStartTime;
-        } else {
-            revert();
-        }
-    }
-
-    function getMintEndTime() public view returns (uint256) {
-        if (currentMintPhase == MintPhase.Public) {
-            return publicPhaseSettings.mintEndTime;
-        } else if (currentMintPhase == MintPhase.Whitelist) {
-            return whitelistPhaseSettings.mintEndTime;
-        } else {
-            revert();
-        }
-    }
-
-    function getPhaseSettings() external view returns (
-        uint256 publicMintPrice,
-        uint256 publicMintLimit,
-        uint256 publicMintStartTime,
-        uint256 publicMintEndTime,
-        uint256 whitelistMintPrice,
-        uint256 whitelistMintLimit,
-        uint256 whitelistMintStartTime,
-        uint256 whitelistMintEndTime
-    ) {
-        return (
-            publicPhaseSettings.mintPrice,
-            publicPhaseSettings.mintLimit,
-            publicPhaseSettings.mintStartTime,
-            publicPhaseSettings.mintEndTime,
-            whitelistPhaseSettings.mintPrice,
-            whitelistPhaseSettings.mintLimit,
-            whitelistPhaseSettings.mintStartTime,
-            whitelistPhaseSettings.mintEndTime
+    function mint(uint256 phaseIndex, uint256 tokenId, uint256 amount) external payable {
+        PhaseSettings memory phase = phases[phaseIndex];
+        require(
+            block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime,
+            ""
         );
+        require(_tokenSupply[tokenId] + amount <= maxSupply, "");
+        require(msg.value == phase.mintPrice * amount, "");
+
+        if (phase.whitelistEnabled) {
+            require(whitelist[msg.sender], "");
+            require(whitelistMinted[msg.sender] + amount <= phase.mintLimit, "");
+            unchecked { whitelistMinted[msg.sender] += amount; }
+        } else {
+            require(publicMinted[msg.sender] + amount <= phase.mintLimit, "");
+            unchecked { publicMinted[msg.sender] += amount; }
+        }
+
+        _mint(msg.sender, tokenId, amount, "");
+        _tokenSupply[tokenId] += amount;
+        distributeSales(msg.value);
     }
 
-    function setWhitelist(address[] memory _addresses, bool _status) external onlyOwner {
-        for (uint256 i = 0; i < _addresses.length; i++) {
-            whitelist[_addresses[i]] = _status;
+    function distributeSales(uint256 totalAmount) internal {
+        uint256 length = salesRecipients.length;
+        for (uint256 i = 0; i < length; ) {
+            uint256 share = (totalAmount * salesShares[i]) / 10000;
+            salesRecipients[i].sendValue(share);
+            unchecked { ++i; }
         }
     }
 
-    function setMintLimits(uint256 _publicMintLimit, uint256 _whitelistMintLimit) external onlyOwner {
-        publicPhaseSettings.mintLimit = _publicMintLimit;
-        whitelistPhaseSettings.mintLimit = _whitelistMintLimit;
+    function updateRecipients(
+        address payable[] calldata _newRecipients,
+        uint256[] calldata _newShares,
+        bool isSales
+    ) external onlyDeployer {
+        require(_newRecipients.length == _newShares.length, "");
+
+        if (isSales) {
+            _updateArray(_newRecipients, _newShares, salesRecipients, salesShares);
+        } else {
+            _updateArray(_newRecipients, _newShares, royaltyRecipients, royaltyShares);
+        }
     }
 
-    function setRoyalties(address payable _royaltyRecipient, uint256 _royaltyPercentage) external onlyOwner {
-        require(_royaltyPercentage <= 10000);
-        royaltyRecipient = _royaltyRecipient;
+  function _updateArray(
+    address payable[] calldata _newRecipients, 
+    uint256[] calldata _newShares, 
+    address payable[] storage recipients, 
+    uint256[] storage shares
+) internal {
+    while (recipients.length > 0) {
+        recipients.pop();
+    }
+    while (shares.length > 0) {
+        shares.pop();
+    }
+    for (uint256 i = 0; i < _newRecipients.length; ) {
+        recipients.push(_newRecipients[i]);
+        shares.push(_newShares[i]);
+        unchecked { ++i; }
+    }
+}
+    function setRoyalties(address payable _recipient, uint256 _royaltyPercentage) external onlyDeployer {
+        require(_royaltyPercentage <= 10000, "");
+        delete royaltyRecipients;
+        delete royaltyShares;
+        royaltyRecipients.push(_recipient);
+        royaltyShares.push(10000);
         royaltyPercentage = _royaltyPercentage;
     }
-
-    function setRecipient(address payable _recipient) external onlyOwner {
-        recipient = _recipient;
+    function setWhitelist(address[] calldata _addresses, bool _status) external onlyDeployer {
+        uint256 length = _addresses.length;
+        for (uint256 i = 0; i < length; ) {
+            whitelist[_addresses[i]] = _status;
+            unchecked { ++i; }
+        }
+    }
+    function setRevealState(bool _state, string memory _newBaseURI) external onlyDeployer {
+        revealState = _state;
+        if (_state) {
+            baseTokenURI = _newBaseURI;
+        }
+    }
+    function uri(uint256 tokenId) public view override returns (string memory) {
+        require(_tokenSupply[tokenId] > 0, "");
+        return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
     }
 
-    function uri(uint256 tokenId) public view override returns (string memory) {
-        require(bytes(baseTokenURI).length > 0);
-        return string(abi.encodePacked(baseTokenURI, tokenId.toString()));
+    function _baseURI() internal view returns (string memory) {
+        return revealState ? baseTokenURI : preRevealURI;
     }
 }
