@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
-
 import "./MintpadERC721Collection.sol";
 import "./MintpadERC1155Collection.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
@@ -11,14 +10,12 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     address public constant PLATFORM_ADDRESS = 0xbEc50cA74830c67b55CbEaf79feD8517E9d9b3B2;
     uint16 public platformFee; 
     uint16 public constant MAX_ROYALTY_PERCENTAGE = 10000; 
-
     event ERC721CollectionDeployed(
         address indexed collectionAddress,
         address indexed owner,
         uint256 maxSupply,
         string baseURI
     );
-
     event ERC1155CollectionDeployed(
         address indexed collectionAddress,
         address indexed owner,
@@ -26,7 +23,7 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         string baseURI
     );
 
-    event PlatformFeeUpdated(uint16 newFee);  // Emit uint16 for lower gas usage
+    event PlatformFeeUpdated(uint16 newFee);  
 
     /// @notice Constructor to set the initial platform fee and ownership
     constructor() {
@@ -77,8 +74,8 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         uint256 maxSupply,
         address payable saleRecipient,  
         address payable[] memory royaltyRecipients,
-        uint256[] memory royaltyShares,  // Use uint16 instead of uint256 for royalty shares for optimization
-        uint16 royaltyPercentage  // Change from uint256 to uint16 to optimize gas
+        uint256[] memory royaltyShares, 
+        uint16 royaltyPercentage  
     ) external payable {
         require(royaltyRecipients.length == royaltyShares.length);
         require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE);
@@ -93,7 +90,7 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
             royaltyRecipients,   
             royaltyShares,       
             royaltyPercentage,
-            msg.sender            // Owner of the new collection
+            msg.sender         
         );
 
         emit ERC1155CollectionDeployed(address(newCollection), msg.sender, maxSupply, baseTokenURI);
