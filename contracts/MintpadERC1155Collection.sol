@@ -9,6 +9,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 contract MintpadERC1155Collection is ERC1155, Ownable {
     using Address for address payable;
     using Strings for uint256;
+
     struct PhaseSettings {
         uint256 mintPrice;
         uint256 mintLimit;
@@ -37,7 +38,7 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     mapping(uint256 => uint256) private _tokenSupply;
 
     modifier onlyDeployer() {
-        require(msg.sender == owner(), "Not the deployer");
+        require(msg.sender == owner(), "");
         _;
     }
 
@@ -53,8 +54,8 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         uint256 _royaltyPercentage,
         address _owner
     ) ERC1155(_baseTokenURI) Ownable(_owner) {
-        require(_royaltyPercentage <= 10000, "Invalid royalty percentage");
-        require(_royaltyRecipients.length == _royaltyShares.length, "Mismatched recipients and shares");
+        require(_royaltyPercentage <= 10000, "");
+        require(_royaltyRecipients.length == _royaltyShares.length, "");
 
         collectionName = _initialName;  
         collectionSymbol = _initialSymbol; 
@@ -70,16 +71,16 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
     function mint(uint256 phaseIndex, uint256 tokenId, uint256 amount) external payable {
         PhaseSettings memory phase = phases[phaseIndex];
-        require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime, "Minting not active");
-        require(_tokenSupply[tokenId] + amount <= maxSupply, "Exceeds max supply");
-        require(msg.value == phase.mintPrice * amount, "Incorrect minting price");
+        require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime, "");
+        require(_tokenSupply[tokenId] + amount <= maxSupply, "");
+        require(msg.value == phase.mintPrice * amount, "");
 
         if (phase.whitelistEnabled) {
-            require(whitelist[msg.sender], "Not whitelisted");
-            require(whitelistMinted[msg.sender] + amount <= phase.mintLimit, "Mint limit exceeded");
+            require(whitelist[msg.sender], "");
+            require(whitelistMinted[msg.sender] + amount <= phase.mintLimit, "");
             unchecked { whitelistMinted[msg.sender] += amount; }
         } else {
-            require(publicMinted[msg.sender] + amount <= phase.mintLimit, "Mint limit exceeded");
+            require(publicMinted[msg.sender] + amount <= phase.mintLimit, "");
             unchecked { publicMinted[msg.sender] += amount; }
         }
 
@@ -95,7 +96,7 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         uint256 _mintEndTime,
         bool _whitelistEnabled
     ) external onlyDeployer {
-        require(_mintStartTime < _mintEndTime, "Invalid phase time");
+        require(_mintStartTime < _mintEndTime, "");
 
         phases.push(PhaseSettings({
             mintPrice: _mintPrice,
@@ -124,13 +125,14 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         uint256 _royaltyPercentage
     ) external onlyDeployer {
         require(_newRecipients.length == _newShares.length);
-        require(_newShares.length > 0, "No shares provided");
-        require(_royaltyPercentage <= 10000, "Invalid royalty percentage");
+        require(_newShares.length > 0, "");
+        require(_royaltyPercentage <= 10000, "");
 
         royaltyRecipients = _newRecipients;
         royaltyShares = _newShares;
         royaltyPercentage = _royaltyPercentage;
     }
+
     function setWhitelist(address[] calldata _addresses, bool _status) external onlyDeployer {
         uint256 length = _addresses.length;
         for (uint256 i = 0; i < length; i++) {
@@ -148,15 +150,21 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
             baseTokenURI = _newBaseURI;
         }
     }
+
     function uri(uint256 tokenId) public view override returns (string memory) {
-        require(_tokenSupply[tokenId] > 0, "Token does not exist");
+        require(_tokenSupply[tokenId] > 0, "");
         return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
     }
-      function getTotalPhases() external view returns (uint256) {
+
+    function getTotalPhases() external view returns (uint256) {
         return phases.length;
     }
 
     function _baseURI() internal view returns (string memory) {
         return revealState ? baseTokenURI : preRevealURI;
+    }
+    function updateMaxSupply(uint256 increment) external onlyDeployer {
+        require(increment > 0, "");
+        maxSupply += increment;
     }
 }

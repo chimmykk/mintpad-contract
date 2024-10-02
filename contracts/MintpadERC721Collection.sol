@@ -5,7 +5,6 @@ import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-
 contract MintpadERC721Collection is ERC721, Ownable {
     using Address for address payable;
     using Strings for uint256;
@@ -31,7 +30,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
 
     PhaseSettings[] public phases;
     mapping(address => uint32) public minted; 
-    mapping(address => bool) public whitelistedAddresses; // New mapping for whitelisted addresses
+    mapping(address => bool) public whitelistedAddresses; 
 
     modifier onlyDeployer() {
         require(msg.sender == owner());
@@ -87,7 +86,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
         require(msg.value == phase.mintPrice);
 
         if (phase.whitelistEnabled) {
-            require(whitelistedAddresses[msg.sender], "You are not whitelisted");
+            require(whitelistedAddresses[msg.sender], "");
             require(minted[msg.sender] < phase.mintLimit);
         } else {
             require(minted[msg.sender] < phase.mintLimit);
@@ -102,10 +101,10 @@ contract MintpadERC721Collection is ERC721, Ownable {
     function distributeSales(uint256 totalAmount) internal {
         saleRecipient.sendValue(totalAmount);
     }
-      function getTotalPhases() external view returns (uint256) {
+
+    function getTotalPhases() external view returns (uint256) {
         return phases.length;
     }
-
 
     function distributeRoyalties(uint256 totalAmount) internal {
         uint256 length = royaltyRecipients.length;
@@ -115,7 +114,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
             unchecked { ++i; }
         }
     }
-    
+
     function setSaleRecipient(address payable _newRecipient) external onlyDeployer {
         saleRecipient = _newRecipient;
     }
@@ -138,12 +137,18 @@ contract MintpadERC721Collection is ERC721, Ownable {
             baseTokenURI = _newBaseURI;
         }
     }
+
     function addToWhitelist(address _address) external onlyDeployer {
         whitelistedAddresses[_address] = true;
     }
 
     function removeFromWhitelist(address _address) external onlyDeployer {
         whitelistedAddresses[_address] = false;
+    }
+
+    function updateMaxSupply(uint256 increment) external onlyDeployer {
+        require(increment > 0, "");
+        maxSupply += increment; 
     }
 
     function _baseURI() internal view virtual override returns (string memory) {
