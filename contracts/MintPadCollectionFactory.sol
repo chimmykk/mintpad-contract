@@ -9,8 +9,9 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     using Address for address payable;
     address public constant PLATFORM_ADDRESS = 0xbEc50cA74830c67b55CbEaf79feD8517E9d9b3B2;
-    uint256 public platformFee;
-    uint256 public constant MAX_ROYALTY_PERCENTAGE = 10000;
+    uint16 public platformFee; 
+    uint16 public constant MAX_ROYALTY_PERCENTAGE = 10000; 
+
     event ERC721CollectionDeployed(
         address indexed collectionAddress,
         address indexed owner,
@@ -25,64 +26,62 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         string baseURI
     );
 
-    event PlatformFeeUpdated(uint256 newFee);
+    event PlatformFeeUpdated(uint16 newFee);  // Emit uint16 for lower gas usage
 
     /// @notice Constructor to set the initial platform fee and ownership
     constructor() {
-        require(msg.sender == PLATFORM_ADDRESS, "");
-        platformFee = 0.00038 ether;
+        require(msg.sender == PLATFORM_ADDRESS);
+        platformFee = 38;  // Set platform fee to 0.00038 ether (in uint16 format for optimization)
         __Ownable_init();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    /// @notice Deploys an ERC721 Collection
+    /// @notice Deploys an ERC721 Collection without sales shares
     function deployERC721Collection(
         string memory name,
         string memory symbol,
         uint256 maxSupply,
         string memory baseURI,
         string memory preRevealURI,
-        address payable[] memory salesRecipients,
-        uint256[] memory salesShares,
+        address payable saleRecipient,  // Single recipient for sales
         address payable[] memory royaltyRecipients,
-        uint256[] memory royaltyShares,
-        uint256 royaltyPercentage
+        uint16[] memory royaltyShares,
+        uint16 royaltyPercentage
     ) external payable {
-        require(salesRecipients.length == salesShares.length, "");
-        require(royaltyRecipients.length == royaltyShares.length, "");
+        require(royaltyRecipients.length == royaltyShares.length);
+        require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE);
+
         MintpadERC721Collection newCollection = new MintpadERC721Collection(
             name,
             symbol,
             maxSupply,
             baseURI,
             preRevealURI,
-            salesRecipients,
-            salesShares,
-            royaltyRecipients,
-            royaltyShares,
+            saleRecipient,      
+            royaltyRecipients,   
+            royaltyShares,       
             royaltyPercentage,
-            msg.sender
+            msg.sender   
         );
 
         emit ERC721CollectionDeployed(address(newCollection), msg.sender, maxSupply, baseURI);
     }
 
-    /// @notice Deploys an ERC1155 Collection
+    /// @notice Deploys an ERC1155 Collection without sales shares
     function deployERC1155Collection(
         string memory collectionName,
         string memory collectionSymbol,
         string memory baseTokenURI,
         string memory preRevealURI,
         uint256 maxSupply,
-        address payable[] memory salesRecipients,
-        uint256[] memory salesShares,
+        address payable saleRecipient,  
         address payable[] memory royaltyRecipients,
-        uint256[] memory royaltyShares,
-        uint256 royaltyPercentage
+        uint256[] memory royaltyShares,  // Use uint16 instead of uint256 for royalty shares for optimization
+        uint16 royaltyPercentage  // Change from uint256 to uint16 to optimize gas
     ) external payable {
-        require(salesRecipients.length == salesShares.length);
         require(royaltyRecipients.length == royaltyShares.length);
+        require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE);
 
         MintpadERC1155Collection newCollection = new MintpadERC1155Collection(
             collectionName,
@@ -90,20 +89,19 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
             maxSupply,
             baseTokenURI,
             preRevealURI,
-            salesRecipients,
-            salesShares,
-            royaltyRecipients,
-            royaltyShares,
+            saleRecipient,      
+            royaltyRecipients,   
+            royaltyShares,       
             royaltyPercentage,
-            msg.sender
+            msg.sender            // Owner of the new collection
         );
 
         emit ERC1155CollectionDeployed(address(newCollection), msg.sender, maxSupply, baseTokenURI);
     }
 
     /// @notice Allows the platform to update the platform fee
-    function updatePlatformFee(uint256 newFee) external {
-        require(msg.sender == PLATFORM_ADDRESS, "");
+    function updatePlatformFee(uint16 newFee) external {  // Use uint16 for platform fee
+        require(msg.sender == PLATFORM_ADDRESS);
         platformFee = newFee;
         emit PlatformFeeUpdated(newFee);
     }
