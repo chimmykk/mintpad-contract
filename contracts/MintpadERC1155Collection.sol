@@ -5,9 +5,11 @@ import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+
 contract MintpadERC1155Collection is ERC1155, Ownable {
     using Address for address payable;
     using Strings for uint256;
+
     struct PhaseSettings {
         uint256 mintPrice;
         uint256 mintLimit;
@@ -21,8 +23,8 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     string private preRevealURI;
     bool public revealState;
 
-    string private _collectionName;
-    string private _collectionSymbol;
+    string private collectionName; // State variable for collection name
+    string private collectionSymbol; // State variable for collection symbol
 
     address payable public saleRecipient; 
     address payable[] public royaltyRecipients; 
@@ -36,7 +38,7 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     mapping(uint256 => uint256) private _tokenSupply;
 
     modifier onlyDeployer() {
-        require(msg.sender == owner());
+        require(msg.sender == owner(), "Not the deployer");
         _;
     }
 
@@ -52,8 +54,11 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         uint256 _royaltyPercentage,
         address _owner
     ) ERC1155(_baseTokenURI) Ownable(_owner) {
-        require(_royaltyPercentage <= 10000);
-        require(_royaltyRecipients.length == _royaltyShares.length);
+        require(_royaltyPercentage <= 10000, "Invalid royalty percentage");
+        require(_royaltyRecipients.length == _royaltyShares.length, "Mismatched recipients and shares");
+
+        collectionName = _initialName;  // Assign to state variable
+        collectionSymbol = _initialSymbol; // Assign to state variable
 
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
@@ -62,23 +67,20 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         royaltyRecipients = _royaltyRecipients;
         royaltyShares = _royaltyShares;
         royaltyPercentage = _royaltyPercentage;
-
-        _collectionName = _initialName;
-        _collectionSymbol = _initialSymbol;
     }
 
     function mint(uint256 phaseIndex, uint256 tokenId, uint256 amount) external payable {
         PhaseSettings memory phase = phases[phaseIndex];
-        require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime, "");
-        require(_tokenSupply[tokenId] + amount <= maxSupply);
-        require(msg.value == phase.mintPrice * amount);
+        require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime, "Minting not active");
+        require(_tokenSupply[tokenId] + amount <= maxSupply, "Exceeds max supply");
+        require(msg.value == phase.mintPrice * amount, "Incorrect minting price");
 
         if (phase.whitelistEnabled) {
-            require(whitelist[msg.sender]);
-            require(whitelistMinted[msg.sender] + amount <= phase.mintLimit);
+            require(whitelist[msg.sender], "Not whitelisted");
+            require(whitelistMinted[msg.sender] + amount <= phase.mintLimit, "Mint limit exceeded");
             unchecked { whitelistMinted[msg.sender] += amount; }
         } else {
-            require(publicMinted[msg.sender] + amount <= phase.mintLimit);
+            require(publicMinted[msg.sender] + amount <= phase.mintLimit, "Mint limit exceeded");
             unchecked { publicMinted[msg.sender] += amount; }
         }
 
@@ -87,31 +89,44 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         distributeSales(msg.value);
     }
 
+    function addMintPhase(
+        uint256 _mintPrice,
+        uint256 _mintLimit,
+        uint256 _mintStartTime,
+        uint256 _mintEndTime,
+        bool _whitelistEnabled
+    ) external onlyDeployer {
+        require(_mintStartTime < _mintEndTime, "Invalid phase time");
+
+        phases.push(PhaseSettings({
+            mintPrice: _mintPrice,
+            mintLimit: _mintLimit,
+            mintStartTime: _mintStartTime,
+            mintEndTime: _mintEndTime,
+            whitelistEnabled: _whitelistEnabled
+        }));
+    }
+
     function distributeSales(uint256 totalAmount) internal {
         saleRecipient.sendValue(totalAmount);
     }
 
     function distributeRoyalties(uint256 totalAmount) internal {
         uint256 length = royaltyRecipients.length;
-        for (uint256 i = 0; i < length; ) {
-            uint256 share = (totalAmount * royaltyShares[i]) / 10000;  // Dividing by 10000 to get basis points (percent out of 100%)
+        for (uint256 i = 0; i < length; i++) {
+            uint256 share = (totalAmount * royaltyShares[i]) / 10000; 
             royaltyRecipients[i].sendValue(share);
-            unchecked { ++i; }
         }
     }
 
-    // Set new recipients and shares for royalties
     function setRoyaltyRecipients(
         address payable[] calldata _newRecipients,
         uint256[] calldata _newShares,
         uint256 _royaltyPercentage
     ) external onlyDeployer {
-        require(_newRecipients.length == _newShares.length);
-        require(_newShares.length > 0);
-        require(_royaltyPercentage <= 10000);
-
-        delete royaltyRecipients;
-        delete royaltyShares;
+        require(_newRecipients.length == _newShares.length, "Mismatched recipients and shares");
+        require(_newShares.length > 0, "No shares provided");
+        require(_royaltyPercentage <= 10000, "Invalid royalty percentage");
 
         royaltyRecipients = _newRecipients;
         royaltyShares = _newShares;
@@ -120,19 +135,20 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
 
     function setWhitelist(address[] calldata _addresses, bool _status) external onlyDeployer {
         uint256 length = _addresses.length;
-        for (uint256 i = 0; i < length; ) {
+        for (uint256 i = 0; i < length; i++) {
             whitelist[_addresses[i]] = _status;
-            unchecked { ++i; }
         }
     }
+
     function setRevealState(bool _state, string memory _newBaseURI) external onlyDeployer {
         revealState = _state;
         if (_state) {
             baseTokenURI = _newBaseURI;
         }
     }
+
     function uri(uint256 tokenId) public view override returns (string memory) {
-        require(_tokenSupply[tokenId] > 0);
+        require(_tokenSupply[tokenId] > 0, "Token does not exist");
         return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
     }
 

@@ -60,6 +60,23 @@ contract MintpadERC721Collection is ERC721, Ownable {
         royaltyShares = _royaltyShares;
         royaltyPercentage = _royaltyPercentage;
     }
+    function addMintPhase(
+        uint128 _mintPrice,
+        uint32 _mintLimit,
+        uint32 _mintStartTime,
+        uint32 _mintEndTime,
+        bool _whitelistEnabled
+    ) external onlyDeployer {
+        require(_mintStartTime < _mintEndTime, "Start time must be before end time");
+        
+        phases.push(PhaseSettings({
+            mintPrice: _mintPrice,
+            mintLimit: _mintLimit,
+            mintStartTime: _mintStartTime,
+            mintEndTime: _mintEndTime,
+            whitelistEnabled: _whitelistEnabled
+        }));
+    }
 
     function mint(uint256 phaseIndex, uint256 tokenId) external payable {
         PhaseSettings memory phase = phases[phaseIndex];
@@ -91,6 +108,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
             unchecked { ++i; }
         }
     }
+    
     function setSaleRecipient(address payable _newRecipient) external onlyDeployer {
         saleRecipient = _newRecipient;
     }
@@ -101,10 +119,8 @@ contract MintpadERC721Collection is ERC721, Ownable {
     ) external onlyDeployer {
         require(_newRecipients.length == _newShares.length);
         require(_newShares.length > 0);
-
         delete royaltyRecipients;
         delete royaltyShares;
-
         royaltyRecipients = _newRecipients;
         royaltyShares = _newShares;
     }
@@ -115,9 +131,11 @@ contract MintpadERC721Collection is ERC721, Ownable {
             baseTokenURI = _newBaseURI;
         }
     }
+
     function _baseURI() internal view virtual override returns (string memory) {
         return revealState ? baseTokenURI : preRevealURI;
     }
+
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(ownerOf(tokenId) != address(0), "");
         return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
