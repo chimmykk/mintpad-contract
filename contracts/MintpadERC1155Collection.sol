@@ -9,7 +9,6 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 contract MintpadERC1155Collection is ERC1155, Ownable {
     using Address for address payable;
     using Strings for uint256;
-
     struct PhaseSettings {
         uint256 mintPrice;
         uint256 mintLimit;
@@ -23,8 +22,8 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
     string private preRevealURI;
     bool public revealState;
 
-    string private collectionName; // State variable for collection name
-    string private collectionSymbol; // State variable for collection symbol
+    string private collectionName; 
+    string private collectionSymbol; 
 
     address payable public saleRecipient; 
     address payable[] public royaltyRecipients; 
@@ -57,8 +56,8 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         require(_royaltyPercentage <= 10000, "Invalid royalty percentage");
         require(_royaltyRecipients.length == _royaltyShares.length, "Mismatched recipients and shares");
 
-        collectionName = _initialName;  // Assign to state variable
-        collectionSymbol = _initialSymbol; // Assign to state variable
+        collectionName = _initialName;  
+        collectionSymbol = _initialSymbol; 
 
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
@@ -124,7 +123,7 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         uint256[] calldata _newShares,
         uint256 _royaltyPercentage
     ) external onlyDeployer {
-        require(_newRecipients.length == _newShares.length, "Mismatched recipients and shares");
+        require(_newRecipients.length == _newShares.length);
         require(_newShares.length > 0, "No shares provided");
         require(_royaltyPercentage <= 10000, "Invalid royalty percentage");
 
@@ -132,12 +131,15 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
         royaltyShares = _newShares;
         royaltyPercentage = _royaltyPercentage;
     }
-
     function setWhitelist(address[] calldata _addresses, bool _status) external onlyDeployer {
         uint256 length = _addresses.length;
         for (uint256 i = 0; i < length; i++) {
             whitelist[_addresses[i]] = _status;
         }
+    }
+
+    function removeFromWhitelist(address _address) external onlyDeployer {
+        whitelist[_address] = false;
     }
 
     function setRevealState(bool _state, string memory _newBaseURI) external onlyDeployer {
@@ -146,10 +148,12 @@ contract MintpadERC1155Collection is ERC1155, Ownable {
             baseTokenURI = _newBaseURI;
         }
     }
-
     function uri(uint256 tokenId) public view override returns (string memory) {
         require(_tokenSupply[tokenId] > 0, "Token does not exist");
         return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
+    }
+      function getTotalPhases() external view returns (uint256) {
+        return phases.length;
     }
 
     function _baseURI() internal view returns (string memory) {

@@ -31,6 +31,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
 
     PhaseSettings[] public phases;
     mapping(address => uint32) public minted; 
+    mapping(address => bool) public whitelistedAddresses; // New mapping for whitelisted addresses
 
     modifier onlyDeployer() {
         require(msg.sender == owner());
@@ -60,6 +61,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
         royaltyShares = _royaltyShares;
         royaltyPercentage = _royaltyPercentage;
     }
+
     function addMintPhase(
         uint128 _mintPrice,
         uint32 _mintLimit,
@@ -67,7 +69,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
         uint32 _mintEndTime,
         bool _whitelistEnabled
     ) external onlyDeployer {
-        require(_mintStartTime < _mintEndTime, "Start time must be before end time");
+        require(_mintStartTime < _mintEndTime);
         
         phases.push(PhaseSettings({
             mintPrice: _mintPrice,
@@ -85,6 +87,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
         require(msg.value == phase.mintPrice);
 
         if (phase.whitelistEnabled) {
+            require(whitelistedAddresses[msg.sender], "You are not whitelisted");
             require(minted[msg.sender] < phase.mintLimit);
         } else {
             require(minted[msg.sender] < phase.mintLimit);
@@ -99,6 +102,10 @@ contract MintpadERC721Collection is ERC721, Ownable {
     function distributeSales(uint256 totalAmount) internal {
         saleRecipient.sendValue(totalAmount);
     }
+      function getTotalPhases() external view returns (uint256) {
+        return phases.length;
+    }
+
 
     function distributeRoyalties(uint256 totalAmount) internal {
         uint256 length = royaltyRecipients.length;
@@ -130,6 +137,13 @@ contract MintpadERC721Collection is ERC721, Ownable {
         if (_state) {
             baseTokenURI = _newBaseURI;
         }
+    }
+    function addToWhitelist(address _address) external onlyDeployer {
+        whitelistedAddresses[_address] = true;
+    }
+
+    function removeFromWhitelist(address _address) external onlyDeployer {
+        whitelistedAddresses[_address] = false;
     }
 
     function _baseURI() internal view virtual override returns (string memory) {
