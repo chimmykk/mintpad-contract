@@ -13,13 +13,12 @@ contract MintpadERC721Collection is ERC721, Ownable {
     uint256 public maxSupply;
     uint256 private _totalMinted;
     string private baseTokenURI;
-    string private preRevealURI;
     bool public revealState;
 
-    address payable public saleRecipient;
-    uint16 public royaltyPercentage; 
+    address payable public saleRecipient; 
     address payable[] public royaltyRecipients;
-    uint16[] public royaltyShares;
+    uint16[] public royaltyShares; 
+    uint16 public royaltyPercentage; 
 
     struct PhaseSettings {
         uint128 mintPrice;
@@ -32,20 +31,16 @@ contract MintpadERC721Collection is ERC721, Ownable {
     PhaseSettings[] public phases;
     mapping(address => uint32) public minted; 
     mapping(address => bool) public whitelisted;
-
     constructor(
         string memory _initialName, string memory _initialSymbol,
-        uint256 _maxSupply, string memory _baseTokenURI,
-        string memory _preRevealURI, address payable _saleRecipient,
-        address payable[] memory _royaltyRecipients, uint16[] memory _royaltyShares,
-        uint16 _royaltyPercentage, address _owner
+        uint256 _maxSupply, string memory _baseTokenURI, address _owner,
+        address payable _saleRecipient, address payable[] memory _royaltyRecipients, 
+        uint16[] memory _royaltyShares, uint16 _royaltyPercentage
     ) ERC721(_initialName, _initialSymbol) Ownable(_owner) {
-        require(_royaltyPercentage <= 10000);
-        require(_royaltyRecipients.length == _royaltyShares.length);
-
+        require(_royaltyPercentage <= 10000 && 
+                _royaltyRecipients.length == _royaltyShares.length, "");
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
-        preRevealURI = _preRevealURI;
         saleRecipient = _saleRecipient;
         royaltyRecipients = _royaltyRecipients;
         royaltyShares = _royaltyShares;
@@ -54,7 +49,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
 
     function mint(uint256 phaseIndex, uint256 tokenId) external payable {
         PhaseSettings memory phase = phases[phaseIndex];
-        require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime, "Minting not active");
+        require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime);
         require(_totalMinted < maxSupply && msg.value == phase.mintPrice && 
                 minted[msg.sender] < phase.mintLimit && 
                 (!phase.whitelistEnabled || whitelisted[msg.sender]));
@@ -74,33 +69,9 @@ contract MintpadERC721Collection is ERC721, Ownable {
         }
     }
 
-    function setSaleRecipient(address payable _newRecipient) external onlyOwner {
-        saleRecipient = _newRecipient;
-    }
-
-    function setRoyaltyRecipients(address payable[] calldata _newRecipients, uint16[] calldata _newShares) external onlyOwner {
-        require(_newRecipients.length == _newShares.length && _newShares.length > 0);
-        royaltyRecipients = _newRecipients;
-        royaltyShares = _newShares;
-    }
-
     function addMintPhase(uint128 price, uint32 limit, uint32 startTime, uint32 endTime, bool whitelistEnabled) external onlyOwner {
-        require(startTime < endTime);
+        require(startTime < endTime, "");
         phases.push(PhaseSettings(price, limit, startTime, endTime, whitelistEnabled));
-    }
-
-    function setRevealState(bool _state, string memory _newBaseURI) external onlyOwner {
-        revealState = _state;
-        if (_state) baseTokenURI = _newBaseURI;
-    }
-
-    function _baseURI() internal view override returns (string memory) {
-        return revealState ? baseTokenURI : preRevealURI;
-    }
-
-    function updateMaxSupply(uint256 increment) external onlyOwner {
-        require(increment > 0);
-        maxSupply += increment;
     }
 
     function manageWhitelist(address[] calldata users, bool status) external onlyOwner {
@@ -110,7 +81,7 @@ contract MintpadERC721Collection is ERC721, Ownable {
     }
 
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        require(ownerOf(tokenId) != address(0), "Token does not exist");
-        return string(abi.encodePacked(_baseURI(), tokenId.toString(), ".json"));
+        require(ownerOf(tokenId) != address(0), "");
+        return string(abi.encodePacked(baseTokenURI, tokenId.toString(), ".json"));
     }
 }
