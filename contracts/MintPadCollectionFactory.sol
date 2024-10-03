@@ -17,7 +17,7 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     address public erc721Implementation;
     address public erc1155Implementation;
 
-    uint256 public platformFee;  // Changed to a state variable
+    uint256 public platformFee;  
 
     event ERC721CollectionDeployed(
         address indexed collectionAddress,

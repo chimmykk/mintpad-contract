@@ -49,5 +49,69 @@ describe("MintpadERC721Collection", function () {
         });
     });
 
+    describe("Minting Phases", function () {
+        it("should allow the owner to add a mint phase", async function () {
+            const price = ethers.parseEther("0.1");
+            const limit = 10;
+            const startTime = Math.floor(Date.now() / 1000) + 60; // Starts in 1 minute
+            const endTime = startTime + 3600; // Ends in 1 hour
+            const whitelistEnabled = true;
 
+            await mintpad.addMintPhase(price, limit, startTime, endTime, whitelistEnabled, []);
+            const phase = await mintpad.getPhase(0);
+
+            expect(phase.mintPrice).to.equal(price);
+            expect(phase.mintLimit).to.equal(limit);
+            expect(phase.mintStartTime).to.equal(startTime);
+            expect(phase.mintEndTime).to.equal(endTime);
+            expect(phase.whitelistEnabled).to.equal(whitelistEnabled);
+        });
+
+        it("should revert if non-owner tries to add a mint phase", async function () {
+            const price = ethers.parseEther("0.1");
+            const limit = 10;
+            const startTime = Math.floor(Date.now() / 1000) + 60; // Starts in 1 minute
+            const endTime = startTime + 3600; // Ends in 1 hour
+            const whitelistEnabled = true;
+
+            await expect(
+                mintpad.connect(addr1).addMintPhase(price, limit, startTime, endTime, whitelistEnabled, [])
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
+        it("should revert if minting outside of phase time", async function () {
+            const price = ethers.parseEther("0.1");
+            const limit = 10;
+            const startTime = Math.floor(Date.now() / 1000) + 60; // Starts in 1 minute
+            const endTime = startTime + 3600; // Ends in 1 hour
+            const whitelistEnabled = true;
+
+            await mintpad.addMintPhase(price, limit, startTime, endTime, whitelistEnabled, []);
+
+            await expect(
+                mintpad.mint(0, 1, { value: price })
+            ).to.be.revertedWith("Minting phase inactive");
+        });
+
+        it("should revert if mint price is incorrect", async function () {
+            const price = ethers.parseEther("0.1");
+            const limit = 10;
+            const startTime = Math.floor(Date.now() / 1000) + 60; // Starts in 1 minute
+            const endTime = startTime + 3600; // Ends in 1 hour
+            const whitelistEnabled = true;
+
+            await mintpad.addMintPhase(price, limit, startTime, endTime, whitelistEnabled, []);
+
+            // Move time forward to within the minting phase
+            await ethers.provider.send("evm_increaseTime", [120]);
+            await ethers.provider.send("evm_mine", []);
+
+            // Attempt to mint with incorrect price
+            await expect(
+                mintpad.mint(0, 1, { value: ethers.parseEther("0.05") })
+            ).to.be.revertedWith("Incorrect mint price");
+        });
+
+       
+    });
 });

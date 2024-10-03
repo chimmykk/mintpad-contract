@@ -20,8 +20,8 @@ describe("MintpadERC1155Collection", function () {
         MintpadERC1155Collection = await ethers.getContractFactory("MintpadERC1155Collection");
         mintpad = await MintpadERC1155Collection.deploy();
         await mintpad.initialize(
-            "Test ERC1155 Token",
-            "TT1155",
+            "Test ERC1155 Token", // Collection name
+            "TT1155", // Collection symbol
             maxSupply,
             baseTokenURI,
             preRevealURI,
@@ -34,6 +34,14 @@ describe("MintpadERC1155Collection", function () {
     });
 
     describe("Initialization", function () {
+        it("should set the correct collection name", async function () {
+            expect(await mintpad.name()).to.equal("Test ERC1155 Token");
+        });
+
+        it("should set the correct collection symbol", async function () {
+            expect(await mintpad.symbol()).to.equal("TT1155");
+        });
+
         it("should set the correct sale recipient", async function () {
             expect(await mintpad.saleRecipient()).to.equal(saleRecipient);
         });
