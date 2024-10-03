@@ -9,7 +9,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /**
  * @title MintpadERC1155Collection
- * @dev A mintable ERC1155 contract that supports phases, whitelist minting, royalty distribution, and a reveal mechanism.
+ * @dev @This contract deploys individual ERC1155 NFT collection contracts with customizable parameters.
  */
 contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     using Address for address payable;

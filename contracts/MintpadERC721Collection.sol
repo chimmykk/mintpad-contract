@@ -6,7 +6,10 @@ import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/U
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
-
+/**
+ * @title MintpadERC721Collection
+ * @dev @This contract deploys individual ERC721 NFT collection contracts with customizable parameters.
+ */
 contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
     using Address for address payable;
     using Strings for uint256;
