@@ -192,7 +192,7 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
     }
 
     /// @notice Returns the total number of mint phases
-    /// @return The total number of phases in the contract
+    /// @return   //The total number of phases in the contract
     function getTotalPhases() external view returns (uint256) {
         return phases.length;
     }

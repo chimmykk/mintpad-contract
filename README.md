@@ -15,3 +15,30 @@ npx harhat compile
 ```
 
 # Mintpad-contracts
+
+## Running Custom Test Suite
+
+To run the custom test suite (`test1`, `test2`, `test3`), follow the steps below:
+
+### 1. Deploy ERC721 and ERC1155 Implementations
+
+Run `test1.js` and `test2.js` to deploy the necessary smart contract implementations.
+
+
+
+### 2. Update Implementation Addresses in test3.js
+After running test1.js and test2.js, update the implementation addresses in test3.js to reflect the deployed contract addresses:
+
+
+const erc721Implementation = "deployedcontractaddress";
+const erc1155Implementation = "deployedcontractaddress";
+
+
+
+
+ Run test3.js
+Once the addresses are updated, run test3.js 
+### 3.  Run for testcases
+npx hardhat test
+
+
