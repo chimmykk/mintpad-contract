@@ -12,6 +12,7 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     using Address for address payable;
 
     address public constant PLATFORM_ADDRESS = 0xbEc50cA74830c67b55CbEaf79feD8517E9d9b3B2;
+    //fixed this to have multiple plat address
     uint16 public constant MAX_ROYALTY_PERCENTAGE = 10000;
 
     address public erc721Implementation;
