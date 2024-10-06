@@ -11,39 +11,37 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     using Address for address payable;
 
-    address public constant PLATFORM_ADDRESS = 0xbEc50cA74830c67b55CbEaf79feD8517E9d9b3B2;
-    //fixed this to have multiple plat address
-    uint16 public constant MAX_ROYALTY_PERCENTAGE = 10000;
+    address[] public platformAddresses;
+    uint16 public constant MAX_ROYALTY_PERCENTAGE = 10000;  // Max royalty percentage (100%)
 
     address public erc721Implementation;
     address public erc1155Implementation;
 
-    uint256 public platformFee;  
+    uint256 public platformFee;  // Platform fee for deployment
 
-    event ERC721CollectionDeployed(
-        address indexed collectionAddress,
-        address indexed owner,
-        uint256 maxSupply
-    );
-    event ERC1155CollectionDeployed(
-        address indexed collectionAddress,
-        address indexed owner,
-        uint256 maxSupply
-    );
+    // Events
+    event ERC721CollectionDeployed(address indexed collectionAddress, address indexed owner, uint256 maxSupply);
+    event ERC1155CollectionDeployed(address indexed collectionAddress, address indexed owner, uint256 maxSupply);
     event PlatformFeeUpdated(uint256 newFee);
 
     /// @notice Initializes the factory and sets initial values
-    function initialize(address _erc721Implementation, address _erc1155Implementation) external initializer {
-        require(msg.sender == PLATFORM_ADDRESS, "Caller is not the platform");
+    function initialize(
+        address _erc721Implementation,
+        address _erc1155Implementation,
+        address[] memory _platformAddresses,
+        uint256 _platformFee
+    ) external initializer {
+        require(_platformAddresses.length > 0, "No platform addresses provided");
         erc721Implementation = _erc721Implementation;
         erc1155Implementation = _erc1155Implementation;
-        platformFee = 0.00038 ether;  // Set initial platform fee
+        platformAddresses = _platformAddresses;
+        platformFee = _platformFee;  // Set initial platform fee
         __Ownable_init();
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
-    /// @notice Deploys an upgradeable ERC721 Collection with a fixed platform fee
+    /// @notice Deploys an upgradeable ERC721 Collection with the platform fee
     function deployERC721Collection(
         string memory name,
         string memory symbol,
@@ -57,22 +55,23 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
     ) external payable {
         require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE, "Royalty percentage exceeds maximum");
         require(msg.value >= platformFee, "Insufficient funds for platform fee");
-        payable(PLATFORM_ADDRESS).sendValue(platformFee);
+
+        // Send the platform fee to the first platform address
+        payable(platformAddresses[0]).sendValue(platformFee);
 
         // Deploy the ERC721 Collection
         ERC1967Proxy proxy = new ERC1967Proxy(
             erc721Implementation,
             abi.encodeWithSelector(
                 MintpadERC721Collection.initialize.selector,
-                name, symbol, maxSupply, baseURI, owner, saleRecipient, royaltyRecipients, royaltyShares, royaltyPercentage
+                name, symbol, maxSupply, baseURI, "", owner, saleRecipient, royaltyRecipients, royaltyShares, royaltyPercentage
             )
         );
 
-        // Emit event
         emit ERC721CollectionDeployed(address(proxy), owner, maxSupply);
     }
 
-    /// @notice Deploys an upgradeable ERC1155 Collection 
+    /// @notice Deploys an upgradeable ERC1155 Collection with the platform fee
     function deployERC1155Collection(
         string memory collectionName,
         string memory baseTokenURI,
@@ -86,23 +85,22 @@ contract MintpadCollectionFactory is UUPSUpgradeable, OwnableUpgradeable {
         require(royaltyPercentage <= MAX_ROYALTY_PERCENTAGE, "Royalty percentage exceeds maximum");
         require(msg.value >= platformFee, "Insufficient funds for platform fee");
 
-        payable(PLATFORM_ADDRESS).sendValue(platformFee);
+        payable(platformAddresses[0]).sendValue(platformFee);
 
+        // Deploy the ERC1155 Collection
         ERC1967Proxy proxy = new ERC1967Proxy(
             erc1155Implementation,
             abi.encodeWithSelector(
                 MintpadERC1155Collection.initialize.selector,
-                collectionName, collectionName, maxSupply, baseTokenURI, saleRecipient, royaltyRecipients, royaltyShares, royaltyPercentage, owner
+                collectionName, baseTokenURI, maxSupply, saleRecipient, royaltyRecipients, royaltyShares, royaltyPercentage, owner
             )
         );
 
-   
         emit ERC1155CollectionDeployed(address(proxy), owner, maxSupply);
     }
 
     /// @notice Allows the platform to update the platform fee
-    function updatePlatformFee(uint256 newFee) external {
-        require(msg.sender == PLATFORM_ADDRESS, "Caller is not the platform");
+    function updatePlatformFee(uint256 newFee) external onlyOwner {
         platformFee = newFee;
         emit PlatformFeeUpdated(newFee);
     }

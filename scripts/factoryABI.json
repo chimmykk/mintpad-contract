@@ -1,0 +1,80 @@
+[
+    {
+        "anonymous": false,
+        "inputs": [
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "collectionAddress",
+                "type": "address"
+            },
+            {
+                "indexed": true,
+                "internalType": "address",
+                "name": "owner",
+                "type": "address"
+            },
+            {
+                "indexed": false,
+                "internalType": "uint256",
+                "name": "maxSupply",
+                "type": "uint256"
+            }
+        ],
+        "name": "ERC721CollectionDeployed",
+        "type": "event"
+    },
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "name",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "symbol",
+                "type": "string"
+            },
+            {
+                "internalType": "uint256",
+                "name": "maxSupply",
+                "type": "uint256"
+            },
+            {
+                "internalType": "string",
+                "name": "baseURI",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "owner",
+                "type": "address"
+            },
+            {
+                "internalType": "address payable",
+                "name": "saleRecipient",
+                "type": "address"
+            },
+            {
+                "internalType": "address[]",
+                "name": "royaltyRecipients",
+                "type": "address[]"
+            },
+            {
+                "internalType": "uint16[]",
+                "name": "royaltyShares",
+                "type": "uint16[]"
+            },
+            {
+                "internalType": "uint16",
+                "name": "royaltyPercentage",
+                "type": "uint16"
+            }
+        ],
+        "name": "deployERC721Collection",
+        "outputs": [],
+        "stateMutability": "payable",
+        "type": "function"
+    }
+]
