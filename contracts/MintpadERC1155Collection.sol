@@ -4,14 +4,17 @@ pragma solidity ^0.8.21;
 import {ERC1155Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC1155/ERC1155Upgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+import {ERC2981Upgradeable} from "@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol";
 
 /**
  * @title MintpadERC1155Collection
  * @dev Upgradeable ERC1155 NFT collection with customizable minting phases and royalty distribution.
  */
-contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, OwnableUpgradeable, ReentrancyGuardUpgradeable, ERC2981Upgradeable {
     using Address for address payable;
     using Strings for uint256;
 
@@ -22,6 +25,7 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
         uint256 mintStartTime;
         uint256 mintEndTime;
         bool whitelistEnabled;
+        bytes32 merkleRoot; // Merkle root for whitelisting
     }
 
     // Collection metadata
@@ -36,27 +40,16 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
     address payable public saleRecipient;
     address payable[] public royaltyRecipients;
     uint256[] public royaltyShares;
-    uint256 public royaltyPercentage;
+    uint96 public royaltyPercentage; // Change to uint96
 
     // Minting phases and user limits
     PhaseSettings[] public phases;
-    mapping(address => bool) public whitelist;
     mapping(address => uint256) public whitelistMinted;
     mapping(address => uint256) public publicMinted;
     mapping(uint256 => uint256) private _tokenSupply;
 
     /**
      * @notice Initializes the contract with collection settings
-     * @param name_ Name of the NFT collection
-     * @param symbol_ Symbol of the NFT collection
-     * @param _maxSupply Maximum supply of the tokens
-     * @param _baseTokenURI Base URI for tokens post-reveal
-     * @param _preRevealURI URI for tokens before reveal
-     * @param _saleRecipient Address to receive primary sale revenue
-     * @param _royaltyRecipients List of royalty recipient addresses
-     * @param _royaltyShares Royalty shares corresponding to each recipient
-     * @param _royaltyPercentage Total royalty percentage (out of 10000, i.e., 100%)
-     * @param _owner Address of the contract owner
      */
     function initialize(
         string memory name_, 
@@ -67,11 +60,13 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
         address payable _saleRecipient, 
         address payable[] memory _royaltyRecipients,
         uint256[] memory _royaltyShares, 
-        uint256 _royaltyPercentage, 
+        uint96 _royaltyPercentage, // Change to uint96
         address _owner
     ) public initializer {
         __ERC1155_init(_baseTokenURI);
         __Ownable_init();
+        __ReentrancyGuard_init();
+        __ERC2981_init();
 
         require(_royaltyRecipients.length == _royaltyShares.length, "Mismatch between royalty recipients and shares");
         require(_royaltyPercentage <= 10000, "Royalty percentage exceeds 100%");
@@ -88,6 +83,9 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
         revealState = false;
 
         transferOwnership(_owner);
+
+        // Set default royalty for the collection
+        _setDefaultRoyalty(_saleRecipient, _royaltyPercentage);
     }
 
     /**
@@ -109,7 +107,6 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
 
     /**
      * @notice Reveals the collection by setting the actual base URI
-     * @param newBaseTokenURI The new base URI to use for the revealed collection
      */
     function revealCollection(string memory newBaseTokenURI) external onlyOwner {
         baseTokenURI = newBaseTokenURI;
@@ -117,19 +114,15 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
     }
 
     /**
-     * @notice Adds a new minting phase with optional whitelist
-     * @param price Price per token during this phase
-     * @param limit Maximum number of tokens a user can mint in this phase
-     * @param startTime Start time of the phase (UNIX timestamp)
-     * @param endTime End time of the phase (UNIX timestamp)
-     * @param whitelistEnabled Whether whitelist is required for this phase
+     * @notice Adds a new minting phase with optional whitelist using a Merkle tree
      */
     function addMintPhase(
         uint256 price, 
         uint256 limit, 
         uint256 startTime, 
         uint256 endTime, 
-        bool whitelistEnabled
+        bool whitelistEnabled,
+        bytes32 merkleRoot
     ) external onlyOwner {
         require(startTime < endTime, "Invalid time range");
 
@@ -138,24 +131,23 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
             mintLimit: limit,
             mintStartTime: startTime,
             mintEndTime: endTime,
-            whitelistEnabled: whitelistEnabled
+            whitelistEnabled: whitelistEnabled,
+            merkleRoot: merkleRoot
         }));
     }
 
     /**
      * @notice Mints tokens during a specific phase
-     * @param phaseIndex Index of the minting phase to mint from
-     * @param tokenId Token ID to mint
-     * @param amount Number of tokens to mint
      */
-    function mint(uint256 phaseIndex, uint256 tokenId, uint256 amount) external payable {
+    function mint(uint256 phaseIndex, uint256 tokenId, uint256 amount, bytes32[] calldata merkleProof) external payable nonReentrant {
         PhaseSettings memory phase = phases[phaseIndex];
         require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime, "Minting phase inactive");
         require(_tokenSupply[tokenId] + amount <= maxSupply, "Max supply reached");
         require(msg.value == phase.mintPrice * amount, "Incorrect mint price");
 
         if (phase.whitelistEnabled) {
-            require(whitelist[msg.sender], "Not whitelisted");
+            bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
+            require(MerkleProof.verify(merkleProof, phase.merkleRoot, leaf), "Not whitelisted");
             require(whitelistMinted[msg.sender] + amount <= phase.mintLimit, "Whitelist mint limit exceeded");
             unchecked { whitelistMinted[msg.sender] += amount; }
         } else {
@@ -174,7 +166,6 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
 
     /**
      * @notice Distributes royalties to recipients
-     * @param totalAmount Total amount to distribute
      */
     function distributeRoyalties(uint256 totalAmount) internal {
         for (uint256 i = 0; i < royaltyRecipients.length; i++) {
@@ -183,20 +174,7 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
     }
 
     /**
-     * @notice Manages the whitelist status for users
-     * @param users List of addresses to update
-     * @param status True to add to whitelist, false to remove
-     */
-    function manageWhitelist(address[] calldata users, bool status) external onlyOwner {
-        for (uint256 i = 0; i < users.length; i++) {
-            whitelist[users[i]] = status;
-        }
-    }
-
-    /**
      * @notice Returns the token URI, using the pre-reveal URI if the collection is not revealed
-     * @param tokenId The ID of the token to query
-     * @return The token URI string
      */
     function uri(uint256 tokenId) public view override returns (string memory) {
         require(_tokenSupply[tokenId] > 0, "Token does not exist");
@@ -210,30 +188,31 @@ contract MintpadERC1155Collection is ERC1155Upgradeable, UUPSUpgradeable, Ownabl
 
     /**
      * @notice Retrieves details of a specific minting phase
-     * @param phaseIndex The index of the minting phase
-     * @return mintPrice The price per token in this phase
-     * @return mintLimit The maximum number of tokens a user can mint in this phase
-     * @return mintStartTime The start time of the phase (UNIX timestamp)
-     * @return mintEndTime The end time of the phase (UNIX timestamp)
-     * @return whitelistEnabled Whether whitelist is required for this phase
      */
     function getPhase(uint256 phaseIndex) external view returns (
         uint256 mintPrice,
         uint256 mintLimit,
         uint256 mintStartTime,
         uint256 mintEndTime,
-        bool whitelistEnabled
+        bool whitelistEnabled,
+        bytes32 merkleRoot
     ) {
         require(phaseIndex < phases.length, "Invalid phase index");
         PhaseSettings memory phase = phases[phaseIndex];
-        return (phase.mintPrice, phase.mintLimit, phase.mintStartTime, phase.mintEndTime, phase.whitelistEnabled);
+        return (phase.mintPrice, phase.mintLimit, phase.mintStartTime, phase.mintEndTime, phase.whitelistEnabled, phase.merkleRoot);
     }
 
     /**
      * @notice Returns the total number of minting phases
-     * @return The total number of phases in the contract
      */
     function getTotalPhases() external view returns (uint256) {
         return phases.length;
+    }
+
+    /**
+     * @dev Overrides to support ERC2981 and ERC1155
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC1155Upgradeable, ERC2981Upgradeable) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }

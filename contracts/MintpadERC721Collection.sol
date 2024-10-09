@@ -1,57 +1,82 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.21;
 
-import {ERC721Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
+import {ERC721AUpgradeable} from "erc721a-upgradeable/contracts/ERC721AUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import {ERC2981Upgradeable} from "@openzeppelin/contracts-upgradeable/token/common/ERC2981Upgradeable.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 /**
  * @title MintpadERC721Collection
  * @dev Upgradeable ERC721 collection with customizable minting phases and royalty distribution.
+ *      Supports ERC2981 royalties.
  */
-contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableUpgradeable {
+contract MintpadERC721Collection is 
+    ERC721AUpgradeable, 
+    UUPSUpgradeable, 
+    OwnableUpgradeable, 
+    ReentrancyGuardUpgradeable, 
+    ERC2981Upgradeable 
+{
     using Address for address payable;
     using Strings for uint256;
 
+    /// @notice Maximum number of tokens that can be minted in this collection.
     uint256 public maxSupply;
-    uint256 private _totalMinted;
+
+    /// @notice Base URI for metadata post-reveal.
     string private baseTokenURI;
+
+    /// @notice URI for the metadata when the collection is not revealed.
     string private preRevealURI;
+
+    /// @notice Indicates if the collection has been revealed.
     bool public revealed;
-    string private _collectionName;
-    string private _collectionSymbol;
 
+    /// @notice Recipient for sale proceeds.
     address payable public saleRecipient;
-    address payable[] public royaltyRecipients;
-    uint16[] public royaltyShares;
-    uint16 public royaltyPercentage; // Max 10000 (for 100%)
 
+    /// @notice Recipients for royalty payments.
+    address payable[] public royaltyRecipients;
+
+    /// @notice Shares for royalty recipients, in basis points.
+    uint16[] public royaltyShares;
+
+    /// @notice Percentage of royalties (in basis points) from each sale.
+    uint96 public royaltyPercentage; // Max 10000 (for 100%)
+
+    /// @dev Struct to define a minting phase.
     struct PhaseSettings {
         uint128 mintPrice;      // Price per token during the phase
         uint32 mintLimit;       // Per user mint limit in this phase
         uint32 mintStartTime;   // Phase start time (UNIX timestamp)
         uint32 mintEndTime;     // Phase end time (UNIX timestamp)
-        bool whitelistEnabled;  // Whether this phase requires whitelist
+        bool whitelistEnabled;  // Whether whitelist is enabled
+        bytes32 merkleRoot;     // Merkle root for whitelisting
     }
 
-    PhaseSettings[] public phases; // Array of minting phases
-    mapping(uint256 => mapping(address => bool)) public phaseWhitelist; // phaseIndex => user => status
-    mapping(address => uint32) public minted; // Track tokens minted per user
+    /// @notice Array of minting phases.
+    PhaseSettings[] public phases;
+
+    /// @notice Tracks the number of tokens minted by an address.
+    mapping(address => uint32) public minted;
 
     /**
-     * @notice Initializes the contract with the provided settings.
-     * @param name_ Name of the NFT collection
-     * @param symbol_ Symbol of the NFT collection
-     * @param _maxSupply Maximum number of NFTs that can be minted
-     * @param _baseTokenURI Base URI for token metadata after the reveal
-     * @param _preRevealURI URI to use before the collection is revealed
-     * @param _owner Address of the contract owner
-     * @param _saleRecipient Address that will receive the primary sale revenue
-     * @param _royaltyRecipients Array of addresses that will receive royalties
-     * @param _royaltyShares Percentage shares for each royalty recipient
-     * @param _royaltyPercentage Total royalty percentage (out of 10000, i.e. 100%)
+     * @dev Initializes the contract with settings.
+     * @param name_ Name of the NFT collection.
+     * @param symbol_ Symbol for the NFT collection.
+     * @param _maxSupply Maximum supply of tokens.
+     * @param _baseTokenURI Metadata base URI after reveal.
+     * @param _preRevealURI Metadata URI before reveal.
+     * @param _owner Address of the contract owner.
+     * @param _saleRecipient Address to receive sale proceeds.
+     * @param _royaltyRecipients List of royalty recipients.
+     * @param _royaltyShares List of royalty share percentages (in basis points).
+     * @param _royaltyPercentage Royalty percentage for ERC2981 (in basis points).
      */
     function initialize(
         string memory name_,
@@ -65,14 +90,14 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
         uint16[] memory _royaltyShares,
         uint16 _royaltyPercentage
     ) initializer public {
-        __ERC721_init(name_, symbol_);
+        __ERC721A_init(name_, symbol_);
         __Ownable_init();
+        __ReentrancyGuard_init();
+        __ERC2981_init();
 
-        require(_royaltyRecipients.length == _royaltyShares.length, "Mismatch between royalty recipients and shares");
+        require(_royaltyRecipients.length == _royaltyShares.length, "Mismatch in royalty recipients and shares");
         require(_royaltyPercentage <= 10000, "Royalty percentage exceeds 100%");
 
-        _collectionName = name_;
-        _collectionSymbol = symbol_;
         maxSupply = _maxSupply;
         baseTokenURI = _baseTokenURI;
         preRevealURI = _preRevealURI;
@@ -83,19 +108,22 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
         revealed = false;
 
         transferOwnership(_owner);
+
+        // Set a default royalty for the entire collection (can be changed later)
+        _setDefaultRoyalty(_saleRecipient, _royaltyPercentage); 
     }
 
     /// @dev Authorization for contract upgrades, only callable by the owner.
     function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /**
-     * @notice Adds a new mint phase with optional whitelist.
+     * @dev Adds a new mint phase with optional whitelist using a Merkle tree.
      * @param price Price per token during the mint phase.
-     * @param limit Maximum number of tokens a single address can mint.
-     * @param startTime Start time of the mint phase (UNIX timestamp).
-     * @param endTime End time of the mint phase (UNIX timestamp).
-     * @param whitelistEnabled Whether whitelist is enabled for this phase.
-     * @param whitelistedAddresses Optional array of addresses to whitelist.
+     * @param limit Maximum number of tokens that can be minted per address in this phase.
+     * @param startTime Start time for the mint phase (Unix timestamp).
+     * @param endTime End time for the mint phase (Unix timestamp).
+     * @param whitelistEnabled Boolean flag indicating if whitelist is required.
+     * @param merkleRoot Merkle root for whitelist verification.
      */
     function addMintPhase(
         uint128 price,
@@ -103,7 +131,7 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
         uint32 startTime,
         uint32 endTime,
         bool whitelistEnabled,
-        address[] calldata whitelistedAddresses
+        bytes32 merkleRoot
     ) external onlyOwner {
         require(startTime < endTime, "Invalid time range");
 
@@ -112,54 +140,33 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
             mintLimit: limit,
             mintStartTime: startTime,
             mintEndTime: endTime,
-            whitelistEnabled: whitelistEnabled
+            whitelistEnabled: whitelistEnabled,
+            merkleRoot: merkleRoot
         }));
-
-        uint256 phaseIndex = phases.length - 1;
-
-        if (whitelistEnabled) {
-            for (uint256 i = 0; i < whitelistedAddresses.length; i++) {
-                phaseWhitelist[phaseIndex][whitelistedAddresses[i]] = true;
-            }
-        }
     }
 
     /**
-     * @notice Updates the whitelist for a specific phase.
-     * @param phaseIndex Index of the minting phase to update.
-     * @param users List of user addresses to be added or removed from the whitelist.
-     * @param status True to add users to the whitelist, false to remove.
+     * @notice Mint tokens during a specific phase.
+     * @param phaseIndex Index of the phase from which to mint.
+     * @param quantity Number of tokens to mint.
+     * @param merkleProof Merkle proof for whitelist verification.
      */
-    function updateWhitelist(uint256 phaseIndex, address[] calldata users, bool status) external onlyOwner {
-        require(phaseIndex < phases.length, "Invalid phase index");
-        require(phases[phaseIndex].whitelistEnabled, "Whitelist not enabled for this phase");
-
-        for (uint256 i = 0; i < users.length; i++) {
-            phaseWhitelist[phaseIndex][users[i]] = status;
-        }
-    }
-
-    /**
-     * @notice Mint a token during a specific phase.
-     * @param phaseIndex Index of the mint phase to mint from.
-     * @param tokenId Token ID to mint.
-     */
-    function mint(uint256 phaseIndex, uint256 tokenId) external payable {
+    function mint(uint256 phaseIndex, uint256 quantity, bytes32[] calldata merkleProof) external payable nonReentrant {
         require(phaseIndex < phases.length, "Invalid phase index");
         PhaseSettings storage phase = phases[phaseIndex];
 
         require(block.timestamp >= phase.mintStartTime && block.timestamp <= phase.mintEndTime, "Minting phase inactive");
-        require(_totalMinted < maxSupply, "Max supply reached");
-        require(msg.value == phase.mintPrice, "Incorrect mint price");
-        require(minted[msg.sender] < phase.mintLimit, "Mint limit exceeded");
+        require(totalSupply() + quantity <= maxSupply, "Max supply reached");
+        require(msg.value == phase.mintPrice * quantity, "Incorrect mint price");
+        require(minted[msg.sender] + uint32(quantity) <= phase.mintLimit, "Mint limit exceeded");
 
         if (phase.whitelistEnabled) {
-            require(phaseWhitelist[phaseIndex][msg.sender], "Not whitelisted for this phase");
+            bytes32 leaf = keccak256(abi.encodePacked(msg.sender));
+            require(MerkleProof.verify(merkleProof, phase.merkleRoot, leaf), "Not whitelisted for this phase");
         }
 
-        _totalMinted++;
-        minted[msg.sender]++;
-        _safeMint(msg.sender, tokenId);
+        minted[msg.sender] += uint32(quantity); // Cast to uint32
+        _safeMint(msg.sender, quantity);
 
         uint256 royaltyAmount = (msg.value * royaltyPercentage) / 10000;
         distributeRoyalties(royaltyAmount);
@@ -167,8 +174,8 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
     }
 
     /**
-     * @notice Distributes royalties to the royalty recipients.
-     * @param totalAmount The total royalty amount to distribute.
+     * @dev Distributes royalties to the royalty recipients.
+     * @param totalAmount Total amount to be distributed as royalties.
      */
     function distributeRoyalties(uint256 totalAmount) internal {
         for (uint256 i = 0; i < royaltyRecipients.length; i++) {
@@ -178,8 +185,8 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
 
     /**
      * @notice Returns the token URI, using the pre-reveal URI if the collection is not revealed.
-     * @param tokenId The token ID to query.
-     * @return The URI string for the token.
+     * @param tokenId ID of the token.
+     * @return URI string for the token's metadata.
      */
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_exists(tokenId), "Token does not exist");
@@ -193,28 +200,21 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
 
     /**
      * @notice Reveals the collection by setting the actual base URI.
-     * @param newBaseTokenURI The new base URI to set for the revealed collection.
+     * @param newBaseTokenURI The new base URI for token metadata.
      */
     function revealCollection(string memory newBaseTokenURI) external onlyOwner {
         baseTokenURI = newBaseTokenURI;
         revealed = true;
     }
 
-    /**
-     * @notice Retrieves the details of a specific minting phase.
-     * @param phaseIndex The index of the phase to retrieve.
-     * @return mintPrice The price per token during the phase.
-     * @return mintLimit The per-user mint limit during the phase.
-     * @return mintStartTime The start time of the phase (UNIX timestamp).
-     * @return mintEndTime The end time of the phase (UNIX timestamp).
-     * @return whitelistEnabled Whether whitelist is enabled for this phase.
-     */
+ 
     function getPhase(uint256 phaseIndex) external view returns (
         uint256 mintPrice,
         uint256 mintLimit,
         uint256 mintStartTime,
         uint256 mintEndTime,
-        bool whitelistEnabled
+        bool whitelistEnabled,
+        bytes32 merkleRoot
     ) {
         require(phaseIndex < phases.length, "Invalid phase index");
         PhaseSettings memory phase = phases[phaseIndex];
@@ -223,15 +223,40 @@ contract MintpadERC721Collection is ERC721Upgradeable, UUPSUpgradeable, OwnableU
             phase.mintLimit,
             phase.mintStartTime,
             phase.mintEndTime,
-            phase.whitelistEnabled
+            phase.whitelistEnabled,
+            phase.merkleRoot
         );
     }
 
     /**
      * @notice Returns the total number of minting phases.
-     * @return The total number of phases in the contract.
+     * @return Total number of minting phases.
      */
     function getTotalPhases() external view returns (uint256) {
         return phases.length;
+    }
+
+    /**
+     * @notice Set royalties for a specific token as per ERC2981.
+     * @param tokenId ID of the token.
+     * @param recipient Recipient of the royalty.
+     * @param feeNumerator Royalty amount in basis points.
+     */
+    function setTokenRoyalty(uint256 tokenId, address recipient, uint96 feeNumerator) external onlyOwner {
+        _setTokenRoyalty(tokenId, recipient, feeNumerator);
+    }
+
+    /**
+     * @notice Set default royalties for all tokens as per ERC2981.
+     * @param recipient Recipient of the royalty.
+     * @param feeNumerator Royalty amount in basis points.
+     */
+    function setDefaultRoyalty(address recipient, uint96 feeNumerator) external onlyOwner {
+        _setDefaultRoyalty(recipient, feeNumerator);
+    }
+
+    /// @dev Overrides to support ERC2981.
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721AUpgradeable, ERC2981Upgradeable) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }

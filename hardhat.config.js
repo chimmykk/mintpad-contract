@@ -1,4 +1,5 @@
 require("@nomicfoundation/hardhat-toolbox");
+require("@openzeppelin/hardhat-upgrades");
 require("dotenv").config(); // For loading environment variables
 
 /** @type import('hardhat/config').HardhatUserConfig */
