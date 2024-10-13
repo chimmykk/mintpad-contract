@@ -1,31 +1,28 @@
-// scripts/deploy.js
+// scripts/deployFactory.js
+
 const { ethers, upgrades } = require("hardhat");
 
 async function main() {
-    // Compile the contracts
-    await hre.run('compile');
+  // Step 1: Use the provided addresses for ERC721 and ERC1155 implementations
+  const erc721Implementation = "0x1F275A4411B535Bd5367F927c18Eef32Cf6CbD30";
+  const erc1155Implementation = "0x38c432389D2f70C0cec3e949a3fC84653ba79C97";
 
-    // Deploy the MintpadERC721Collection contract
-    const MintpadERC721Collection = await ethers.getContractFactory("MintpadERC721Collection");
-    const mintpadERC721Collection = await upgrades.deployProxy(MintpadERC721Collection, {
-        initializer: 'initialize',
-    });
-    await mintpadERC721Collection.deployed();
-    
-    console.log("MintpadERC721Collection deployed to:", mintpadERC721Collection.address);
+  console.log("Using ERC721 implementation address:", erc721Implementation);
+  console.log("Using ERC1155 implementation address:", erc1155Implementation);
 
-    // Deploy the MintpadERC721CollectionFactory contract with the address of the MintpadERC721Collection implementation
-    const MintpadERC721CollectionFactory = await ethers.getContractFactory("MintpadCollectionFactory");
-    const mintpadERC721CollectionFactory = await MintpadERC721CollectionFactory.deploy(mintpadERC721Collection.address);
-    await mintpadERC721CollectionFactory.deployed();
-
-    console.log("MintpadERC721CollectionFactory deployed to:", mintpadERC721CollectionFactory.address);
+  // Step 2: Deploy the MintpadCollectionFactory with the implementation addresses
+  console.log("Deploying MintpadCollectionFactory...");
+  const MintpadCollectionFactory = await ethers.getContractFactory("MintpadCollectionFactory");
+  const factory = await upgrades.deployProxy(MintpadCollectionFactory, [erc721Implementation, erc1155Implementation], {
+    initializer: "initialize"
+  });
+  await factory.deployed();
+  console.log("MintpadCollectionFactory deployed at:", factory.address);
 }
 
-// Execute the script
 main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-        console.error(error);
-        process.exit(1);
-    });
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

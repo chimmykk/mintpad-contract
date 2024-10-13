@@ -15,7 +15,7 @@ module.exports = {
   },
   networks: {
     taikohekla: {
-      url: `https://167009.rpc.thirdweb.com/${process.env.THIRDWEB_API_KEY}`, // Taiko Helka RPC URL
+      url: `https://taiko-hekla.blockpi.network/v1/rpc/public`, // Taiko Helka RPC URL
       accounts: [process.env.PRIVATE_KEY] // Use environment variable for wallet private key
     },
     goerli: {
